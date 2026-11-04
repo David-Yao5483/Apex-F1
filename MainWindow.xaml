@@ -225,18 +225,17 @@
                                 <Button x:Name="WatchMoreButton" Content="观看更多" HorizontalAlignment="Left"
                                         Click="WatchMore_Click" />
                             </StackPanel>
-                            <StackPanel x:Name="StandingsPanel" Visibility="Collapsed" Spacing="12" Margin="0,0,0,18">
-                                <SelectorBar x:Name="StandingsTabs" AutomationProperties.Name="积分榜类别"
-                                             SelectionChanged="StandingsTabs_SelectionChanged">
-                                    <SelectorBarItem x:Name="DriverStandingsItem" Text="车手积分榜" />
-                                    <SelectorBarItem x:Name="TeamStandingsItem" Text="车队积分榜" />
-                                </SelectorBar>
-                                <local:NativeResultsTable x:Name="StandingsTable" />
-                            </StackPanel>
-                            <StackPanel x:Name="RaceDetailPanel" Visibility="Collapsed" Spacing="10">
-                                <Button x:Name="BackToResultsButton" Content="返回分站赛果" Click="BackToResults_Click"
-                                        HorizontalAlignment="Left" />
-                                <local:NativeResultsTable x:Name="RaceDetailTable" />
+                            <StackPanel x:Name="ResultsTablePanel" Visibility="Collapsed" Spacing="12">
+                                <Grid Height="48">
+                                    <SelectorBar x:Name="StandingsTabs" Visibility="Collapsed"
+                                                 AutomationProperties.Name="积分榜类别" SelectionChanged="StandingsTabs_SelectionChanged">
+                                        <SelectorBarItem x:Name="DriverStandingsItem" Text="车手积分榜" />
+                                        <SelectorBarItem x:Name="TeamStandingsItem" Text="车队积分榜" />
+                                    </SelectorBar>
+                                    <Button x:Name="BackToResultsButton" Visibility="Collapsed" Content="返回分站赛果"
+                                            Click="BackToResults_Click" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                                </Grid>
+                                <local:NativeResultsTable x:Name="ResultsTable" />
                             </StackPanel>
                             <ItemsRepeater x:Name="RaceRows" Visibility="Collapsed" ItemTemplate="{StaticResource RaceRowTemplate}">
                                 <ItemsRepeater.Layout>

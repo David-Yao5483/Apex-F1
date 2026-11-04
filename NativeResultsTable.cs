@@ -73,6 +73,8 @@ public sealed class NativeResultsTable : UserControl
     private void Draw(string name, string[] headers, double[] widths, double minWidth, IEnumerable<Cell[]> rows)
     {
         AutomationProperties.SetName(_scroller, name);
+        if (_minimumTableWidth != minWidth)
+            _scroller.ChangeView(0, null, null, disableAnimation: true);
         _minimumTableWidth = minWidth;
         _table.Children.Clear();
         _table.Children.Add(BuildRow(headers.Select(header => new Cell(header)).ToArray(), widths, isHeader: true, ruled: true));
@@ -126,7 +128,7 @@ public sealed class NativeResultsTable : UserControl
             Child = grid,
             Height = isHeader ? 50 : 56.667,
             BorderBrush = isHeader ? _headerRule : _rowRule,
-            BorderThickness = new Thickness(0, 0, 0, ruled ? (isHeader ? 2 : 0.667) : 0)
+            BorderThickness = new Thickness(0, 0, 0, ruled ? (isHeader ? 2 : 1) : 0)
         };
     }
 
@@ -173,10 +175,9 @@ public sealed class NativeResultsTable : UserControl
     private void ApplyPalette()
     {
         var dark = ActualTheme == ElementTheme.Dark;
-        _table.Background = new SolidColorBrush(dark ? Color.FromArgb(255, 28, 28, 28) : Colors.White);
         _text.Color = dark ? Colors.White : Colors.Black;
         _heading.Color = dark ? Color.FromArgb(255, 205, 205, 205) : Color.FromArgb(255, 96, 96, 102);
-        _headerRule.Color = dark ? Color.FromArgb(255, 116, 116, 116) : Color.FromArgb(255, 170, 170, 170);
-        _rowRule.Color = dark ? Color.FromArgb(255, 61, 61, 61) : Color.FromArgb(255, 224, 222, 220);
+        _headerRule.Color = dark ? Color.FromArgb(112, 255, 255, 255) : Color.FromArgb(85, 0, 0, 0);
+        _rowRule.Color = dark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(34, 0, 0, 0);
     }
 }

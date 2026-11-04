@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -15,6 +16,11 @@ public sealed partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApexF1");
     private static readonly string ThemeFile = Path.Combine(DataFolder, "theme.txt");
     private static readonly string LanguageFile = Path.Combine(DataFolder, "language.txt");
+    private static readonly string WindowFile = Path.Combine(DataFolder, "window.json");
+
+    private sealed record WindowPreferences(double Width, double Height, bool Maximized);
+
+    private WindowPreferences _windowPreferences = new(1240, 820, Maximized: true);
 
     private WebView2? _webView;
     private SourceLink? _readerLink;
@@ -54,21 +60,72 @@ public sealed partial class MainWindow : Window
     private void SetInitialWindowBounds(object sender, RoutedEventArgs e)
     {
         Root.Loaded -= SetInitialWindowBounds;
-        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-        var scale = Root.XamlRoot.RasterizationScale;
-        var width = Math.Min(workArea.Width, (int)(1240 * scale));
-        var height = Math.Min(workArea.Height, (int)(820 * scale));
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        if (ReadPreference(WindowFile) is { } json)
         {
-            presenter.PreferredMinimumWidth = Math.Min(workArea.Width, (int)(520 * scale));
-            presenter.PreferredMinimumHeight = Math.Min(workArea.Height, (int)(390 * scale));
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var settings = document.RootElement;
+                if (settings.Deserialize<WindowPreferences>() is { } saved &&
+                    double.IsFinite(saved.Width) && saved.Width > 0 &&
+                    double.IsFinite(saved.Height) && saved.Height > 0)
+                {
+                    var wasFullScreen = settings.TryGetProperty("FullScreen", out var mode) &&
+                        mode.ValueKind == JsonValueKind.True;
+                    _windowPreferences = saved with { Maximized = saved.Maximized || wasFullScreen };
+                }
+            }
+            catch (JsonException)
+            {
+                // An incomplete settings file can be replaced on the next close.
+            }
         }
 
-        AppWindow.MoveAndResize(new(
-            workArea.X + (workArea.Width - width) / 2,
-            workArea.Y + (workArea.Height - height) / 2,
-            width,
-            height));
+        ApplyNormalWindowSize();
+        if (_windowPreferences.Maximized && AppWindow.Presenter is OverlappedPresenter presenter)
+            presenter.Maximize();
+
+        AppWindow.Changed += (_, _) => RememberWindowSize();
+        AppWindow.Closing += (_, _) =>
+        {
+            RememberWindowSize();
+            SavePreference(WindowFile, JsonSerializer.Serialize(_windowPreferences));
+        };
+    }
+
+    private void ApplyNormalWindowSize()
+    {
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var scale = Root.XamlRoot.RasterizationScale;
+        var minWidth = Math.Min(workArea.Width, (int)(520 * scale));
+        var minHeight = Math.Min(workArea.Height, (int)(390 * scale));
+        var width = (int)Math.Clamp(Math.Round(_windowPreferences.Width * scale), minWidth, workArea.Width);
+        var height = (int)Math.Clamp(Math.Round(_windowPreferences.Height * scale), minHeight, workArea.Height);
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = minWidth;
+            presenter.PreferredMinimumHeight = minHeight;
+        }
+
+        AppWindow.MoveAndResize(new(workArea.X + (workArea.Width - width) / 2,
+            workArea.Y + (workArea.Height - height) / 2, width, height));
+    }
+
+    private void RememberWindowSize()
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter presenter)
+            return;
+
+        if (presenter.State == OverlappedPresenterState.Maximized)
+        {
+            _windowPreferences = _windowPreferences with { Maximized = true };
+        }
+        else if (presenter.State == OverlappedPresenterState.Restored)
+        {
+            var scale = Root.XamlRoot.RasterizationScale;
+            var size = AppWindow.Size;
+            _windowPreferences = new(size.Width / scale, size.Height / scale, Maximized: false);
+        }
     }
 
     private void Root_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -217,13 +274,15 @@ public sealed partial class MainWindow : Window
             case "standings":
                 ShowHub("积分榜", "查看本赛季 Formula 1 官方积分。", StandingLinks());
                 OnlineControls.Visibility = Visibility.Visible;
-                StandingsPanel.Visibility = Visibility.Visible;
+                ResultsTablePanel.Visibility = Visibility.Visible;
+                StandingsTabs.Visibility = Visibility.Visible;
                 ShowStandingTable([]);
                 break;
             case "results" when _raceDetail is { } race:
                 ShowHub(race.Title, race.Provider, [new("官方赛果", [race])]);
-                RaceDetailTable.ShowRace([]);
-                RaceDetailPanel.Visibility = Visibility.Visible;
+                ResultsTablePanel.Visibility = Visibility.Visible;
+                BackToResultsButton.Visibility = Visibility.Visible;
+                ResultsTable.ShowRace([]);
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
             case "results":
@@ -253,8 +312,9 @@ public sealed partial class MainWindow : Window
         _onlineRequest = null;
         OnlineControls.Visibility = Visibility.Collapsed;
         NewsPanel.Visibility = Visibility.Collapsed;
-        StandingsPanel.Visibility = Visibility.Collapsed;
-        RaceDetailPanel.Visibility = Visibility.Collapsed;
+        ResultsTablePanel.Visibility = Visibility.Collapsed;
+        StandingsTabs.Visibility = Visibility.Collapsed;
+        BackToResultsButton.Visibility = Visibility.Collapsed;
         RaceRows.Visibility = Visibility.Collapsed;
         RaceRows.ItemsSource = null;
         if (!_changingLanguage)
@@ -278,7 +338,7 @@ public sealed partial class MainWindow : Window
 
     private void StandingsTabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        if (StandingsPanel.Visibility != Visibility.Visible)
+        if (StandingsTabs.Visibility != Visibility.Visible)
             return;
 
         ShowStandingTable([]);
@@ -289,9 +349,9 @@ public sealed partial class MainWindow : Window
     private void ShowStandingTable(IReadOnlyList<StandingRow> rows)
     {
         if (SelectedStanding == Catalog.Standings)
-            StandingsTable.ShowDrivers(rows);
+            ResultsTable.ShowDrivers(rows);
         else
-            StandingsTable.ShowTeams(rows);
+            ResultsTable.ShowTeams(rows);
     }
 
     private async Task RefreshOnlineAsync()
@@ -320,7 +380,7 @@ public sealed partial class MainWindow : Window
                 break;
             case "results" when _raceDetail is { } race:
                 await UpdateFeedAsync(() => OnlineCatalog.GetRaceClassificationAsync(race, request.Token),
-                    RaceDetailTable.ShowRace, F1FeedError, race.DisplayTitle, request);
+                    ResultsTable.ShowRace, F1FeedError, race.DisplayTitle, request);
                 break;
             case "results":
                 await UpdateFeedAsync(() => OnlineCatalog.GetRaceResultsAsync(request.Token),

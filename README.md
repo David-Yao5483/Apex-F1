@@ -2,9 +2,11 @@
 
 Apex F1 是一个 Windows 桌面观赛与赛事信息应用，使用 C#、WinUI 3 XAML 和 Windows App SDK。窗口顶部居中排列新闻、积分榜、赛果、赛历和观赛五个标签，启动时打开新闻。首次启动时，中文系统使用简体中文，其余系统语言使用英文。标题栏左侧可切换中英文和深浅主题，应用会记住选择。深浅切换按钮右侧的刷新图标用于更新当前数据或重载应用内网页。
 
+首次启动默认最大化。应用关闭时记住最大化或普通窗口状态，以及普通窗口的大小。
+
 ## 构建与运行
 
-本机生成的 x64 发布目录为 `bin\publish\win-x64-tables`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
+本机生成的 x64 发布目录为 `bin\publish\win-x64-maximized`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
 
 在 Windows 上安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。使用支持 Windows App SDK 的 Visual Studio 打开项目，或在项目目录运行以下命令。
 
