@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -10,13 +11,17 @@ namespace ApexF1;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly string _webDataFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApexF1", "WebView2");
+    private static readonly string DataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApexF1");
+    private static readonly string ThemeFile = Path.Combine(DataFolder, "theme.txt");
 
     private int _featureIndex;
     private WebView2? _webView;
     private SourceLink? _readerLink;
     private Control? _readerOrigin;
+    private CancellationTokenSource? _onlineRequest;
+    private IReadOnlyList<SourceLink> _news = [];
+    private IReadOnlyList<SourceLink> _videos = [];
 
     public MainWindow()
     {
@@ -25,9 +30,17 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "ApexF1.ico"));
         Root.Loaded += SetInitialWindowBounds;
+        RestoreTheme();
+        Root.ActualThemeChanged += (_, _) => UpdateTheme();
+        UpdateTheme();
         RenderFeature();
-        Rail.SelectedItem = HomeItem;
-        Closed += (_, _) => ReleaseWebView();
+        StandingsTabs.SelectedItem = DriverStandingsItem;
+        MainTabs.SelectedItem = HomeItem;
+        Closed += (_, _) =>
+        {
+            _onlineRequest?.Cancel();
+            ReleaseWebView();
+        };
     }
 
     private void SetInitialWindowBounds(object sender, RoutedEventArgs e)
@@ -60,16 +73,49 @@ public sealed partial class MainWindow : Window
         ExternalLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void Rail_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RestoreTheme()
     {
-        if (Rail.SelectedItem is ListViewItem { Tag: string section })
-            ShowSection(section);
+        try
+        {
+            Root.RequestedTheme = File.ReadAllText(ThemeFile) switch
+            {
+                "Dark" => ElementTheme.Dark,
+                "Light" => ElementTheme.Light,
+                _ => ElementTheme.Default
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
-    private void Rail_ItemClick(object sender, ItemClickEventArgs e)
+    private void ThemeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Reader.Visibility == Visibility.Visible && ReferenceEquals(e.ClickedItem, Rail.SelectedItem) &&
-            e.ClickedItem is ListViewItem { Tag: string section })
+        Root.RequestedTheme = Root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+        try
+        {
+            Directory.CreateDirectory(DataFolder);
+            File.WriteAllText(ThemeFile, Root.RequestedTheme.ToString());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private void UpdateTheme()
+    {
+        var dark = Root.ActualTheme == ElementTheme.Dark;
+        var label = dark ? "切换到浅色模式" : "切换到深色模式";
+        ThemeIcon.Glyph = dark ? "\uE706" : "\uE708";
+        ToolTipService.SetToolTip(ThemeButton, label);
+        AutomationProperties.SetName(ThemeButton, label);
+        if (_webView?.CoreWebView2 is { } core)
+            core.Profile.PreferredColorScheme = dark ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
+    }
+
+    private void MainTabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (sender.SelectedItem?.Tag is string section)
             ShowSection(section);
     }
 
@@ -77,14 +123,25 @@ public sealed partial class MainWindow : Window
     {
         switch (section)
         {
-            case "official":
-                ShowHub("F1 官网", "从这里进入 Formula 1 官方各栏目，也可在官网首页浏览完整站点。", Catalog.OfficialSite);
+            case "news":
+                ShowHub("新闻", "浏览 Formula 1 官网新闻和 F1赛事资讯的近期视频。", NewsGroups());
+                OnlineControls.Visibility = Visibility.Visible;
+                _ = RefreshOnlineAsync();
+                break;
+            case "standings":
+                ShowHub("积分榜", "查看本赛季 Formula 1 官方积分。", StandingLinks());
+                OnlineControls.Visibility = Visibility.Visible;
+                StandingsPanel.Visibility = Visibility.Visible;
+                _ = RefreshOnlineAsync();
+                break;
+            case "results":
+                ShowHub("赛果", "查看各站正赛、排位、冲刺赛和历年成绩。", [new("官方赛果", [Catalog.Results])]);
+                break;
+            case "calendar":
+                ShowHub("赛历", "查看各站大奖赛、赛道和分节时间。", [new("官方赛历", [Catalog.Calendar])]);
                 break;
             case "watch":
-                ShowHub("观赛", "央视赛事转播以节目单为准。F1 TV 的直播和回放取决于所在地区及订阅。", Catalog.Watch);
-                break;
-            case "creators":
-                ShowHub("创作者", "在哔哩哔哩关注中文赛事资讯、赛后复盘和数据解说。", Catalog.Creators);
+                ShowHub("观赛", "央视赛事转播以节目单为准。F1 TV 的直播和回放取决于所在地区及订阅。", [.. Catalog.Watch, .. Catalog.Creators]);
                 break;
             default:
                 ShowHub("首页", "", Catalog.Home, isHome: true);
@@ -94,6 +151,10 @@ public sealed partial class MainWindow : Window
 
     private void ShowHub(string title, string description, IReadOnlyList<LinkGroup> groups, bool isHome = false)
     {
+        _onlineRequest?.Cancel();
+        _onlineRequest = null;
+        OnlineControls.Visibility = Visibility.Collapsed;
+        StandingsPanel.Visibility = Visibility.Collapsed;
         CloseReader();
         PageTitle.Text = title;
         PageDescription.Text = description;
@@ -101,6 +162,84 @@ public sealed partial class MainWindow : Window
         Hero.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
         Groups.ItemsSource = groups;
         Hub.ChangeView(null, 0, null, disableAnimation: true);
+    }
+
+    private LinkGroup[] NewsGroups() =>
+    [
+        new("F1 官网新闻", [.. _news, Catalog.News]),
+        new("F1赛事资讯 · 最新视频", [.. _videos, Catalog.BiliNews])
+    ];
+
+    private SourceLink SelectedStanding =>
+        ReferenceEquals(StandingsTabs.SelectedItem, DriverStandingsItem) ? Catalog.Standings : Catalog.TeamStandings;
+
+    private LinkGroup[] StandingLinks() => [new("数据来源", [SelectedStanding])];
+
+    private void StandingsTabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (StandingsPanel.Visibility != Visibility.Visible)
+            return;
+
+        StandingRows.ItemsSource = null;
+        Groups.ItemsSource = StandingLinks();
+        _ = RefreshOnlineAsync();
+    }
+
+    private async void RefreshOnline_Click(object sender, RoutedEventArgs e) => await RefreshOnlineAsync();
+
+    private async Task RefreshOnlineAsync()
+    {
+        _onlineRequest?.Cancel();
+        using var request = new CancellationTokenSource();
+        _onlineRequest = request;
+        OnlineProgress.Visibility = Visibility.Visible;
+        F1FeedError.IsOpen = false;
+        BiliFeedError.IsOpen = false;
+
+        if (MainTabs.SelectedItem?.Tag as string == "news")
+        {
+            await Task.WhenAll(
+                UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => _news = links, F1FeedError, "F1 新闻", request),
+                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => _videos = links, BiliFeedError, "B 站视频", request));
+        }
+        else
+        {
+            var source = SelectedStanding;
+            await UpdateFeedAsync(
+                () => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token),
+                rows => StandingRows.ItemsSource = rows, F1FeedError, source.Title, request);
+        }
+
+        if (_onlineRequest == request)
+        {
+            _onlineRequest = null;
+            OnlineProgress.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async Task UpdateFeedAsync<T>(Func<Task<T>> load, Action<T> show, InfoBar error, string label,
+        CancellationTokenSource request)
+    {
+        try
+        {
+            var result = await load();
+            if (_onlineRequest != request)
+                return;
+
+            show(result);
+            if (MainTabs.SelectedItem?.Tag as string == "news")
+                Groups.ItemsSource = NewsGroups();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or FormatException or
+            System.Text.Json.JsonException or System.Text.RegularExpressions.RegexMatchTimeoutException or OperationCanceledException)
+        {
+            if (_onlineRequest != request || request.IsCancellationRequested)
+                return;
+
+            error.Title = $"{label}暂时无法更新";
+            error.Message = "可以重试刷新，或打开下方的来源页面。";
+            error.IsOpen = true;
+        }
     }
 
     private void RenderFeature()
@@ -131,7 +270,7 @@ public sealed partial class MainWindow : Window
         if (Catalog.Features[_featureIndex].Link is SourceLink link)
             await OpenSourceAsync(link);
         else
-            Rail.SelectedItem = CreatorsItem;
+            MainTabs.SelectedItem = NewsItem;
     }
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
@@ -159,7 +298,7 @@ public sealed partial class MainWindow : Window
             return;
 
         var matches = Catalog.Search(query).ToArray();
-        Rail.SelectedIndex = -1;
+        MainTabs.SelectedItem = null;
         ShowHub("搜索结果", matches.Length == 0 ? $"找不到与“{query}”相关的入口。" : $"“{query}” · {matches.Length} 个入口",
             matches.Length == 0 ? [] : [new("相关入口", matches)]);
     }
@@ -188,7 +327,7 @@ public sealed partial class MainWindow : Window
         UpdateHistory();
         try
         {
-            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, _webDataFolder, null);
+            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(DataFolder, "WebView2"), null);
             if (_webView != view)
                 return;
 
@@ -197,6 +336,7 @@ public sealed partial class MainWindow : Window
                 return;
 
             var core = view.CoreWebView2;
+            UpdateTheme();
             core.Settings.IsWebMessageEnabled = false;
             core.HistoryChanged += (_, _) =>
             {

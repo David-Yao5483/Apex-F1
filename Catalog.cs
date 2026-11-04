@@ -39,6 +39,7 @@ internal static class Catalog
     internal static readonly SourceLink Calendar = Official("赛历与赛程", "各站大奖赛日期、赛道和分节时间。", $"/en/racing/{Season}", "\uE787", "时间 正赛 排位 冲刺 练习 schedule calendar");
     internal static readonly SourceLink Results = Official("比赛成绩", "分站赛果和历年成绩档案。", "/en/results", "\uE9D9", "历史 冠军 results");
     internal static readonly SourceLink Standings = Official("车手积分", "世界车手锦标赛官方积分榜。", $"/en/results/{Season}/drivers", "\uECA5", "排名 车手积分榜 standings");
+    internal static readonly SourceLink TeamStandings = Official("车队积分", "世界车队锦标赛官方积分榜。", $"/en/results/{Season}/team", "\uECA5", "车队排名 constructors standings");
     internal static readonly SourceLink Video = Official("官方视频", "比赛集锦、车载镜头和围场节目。", "/en/video", "\uE714", "回放 精彩瞬间 video highlights");
     internal static readonly SourceLink Timing = Official("实时计时", "比赛排名、赛段、圈速和赛道追踪。", "/en/timing/f1-live", "\uE916", "数据 遥测 live timing");
     internal static readonly SourceLink F1Tv = Official("F1 TV", "官方赛事直播、回放、节目和历史档案。", "https://f1tv.formula1.com/", "\uE7F4", "直播 录像 观赛");
@@ -53,7 +54,8 @@ internal static class Catalog
     [
         new("快速访问", [Calendar, News, Results, Standings]),
         new("观赛入口", [Cctv5, Cctv5Plus, F1Tv, Timing]),
-        new("中文创作者", [BiliNews, Masha])
+        new("中文创作者", [BiliNews, Masha]),
+        new("探索 F1 官网", [F1Home])
     ];
 
     internal static readonly LinkGroup[] OfficialSite =
@@ -61,7 +63,7 @@ internal static class Catalog
         new("资讯与赛季",
         [
             F1Home, News, Calendar, Results, Standings,
-            Official("车队积分", "世界车队锦标赛官方积分榜。", $"/en/results/{Season}/team", "\uECA5", "车队排名 constructors standings"),
+            TeamStandings,
             Official("车手", "现役车手名单、个人档案与生涯数据。", "/en/drivers", "\uE77B", "drivers"),
             Official("车队", "各支车队的阵容与历史。", "/en/teams", "\uE902", "teams"),
             Official("F1 奖项", "查看最佳车手、最快圈和其他官方奖项。", "/en/results/awards", "\uE735", "awards"),
@@ -125,7 +127,7 @@ internal static class Catalog
     [
         new("FORMULA 1", "F1 赛事中心", "从赛程、官方新闻到实时计时，跟进每个大奖赛周末。", "查看官方赛历", Calendar, "Race"),
         new("CCTV 体育", "跟着央视看 F1", "打开央视赛车专区，查看转播预告、频道直播和比赛视频。", "进入赛车专区", CctvRacing, "Watch"),
-        new("BILIBILI", "围场之外", "关注 F1赛事资讯和马莎拉车，赛前看前瞻，赛后看复盘。", "查看 B 站创作者", null, "Community")
+        new("BILIBILI", "围场之外", "查看 F1赛事资讯的赛前前瞻和赛后复盘。", "查看新闻与视频", null, "Community")
     ];
 
     internal static readonly SourceLink[] All = OfficialSite.Concat(Watch).Concat(Creators)
