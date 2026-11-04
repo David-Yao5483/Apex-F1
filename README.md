@@ -6,7 +6,7 @@ Apex F1 是一个 Windows 桌面观赛与赛事信息应用，使用 C#、WinUI 
 
 ## 构建与运行
 
-本机生成的 x64 发布目录为 `bin\publish\win-x64-maximized`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
+本机生成的 x64 发布目录为 `bin\publish\win-x64-navigation`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
 
 在 Windows 上安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。使用支持 Windows App SDK 的 Visual Studio 打开项目，或在项目目录运行以下命令。
 
@@ -33,4 +33,4 @@ ARM64 使用 `-p:Platform=ARM64 -r win-arm64`。应用采用免安装目录分�
 
 车手及领队肖像、新闻封面和视频封面缓存在 `%LocalAppData%\ApexF1\ImageCache`。图片缓存有效期为 30 天，超过 128 MB 时会清理较早缓存的文件。
 
-使用 `Ctrl+F` 可定位标题栏搜索框。应用内网页支持后退、前进和“在浏览器打开”。播放、登录和订阅条件由各来源平台决定。
+使用 `Ctrl+F` 可定位标题栏搜索框。分站赛果和应用内网页使用标题栏左侧的同一个回退按钮。应用内网页支持前进和“在浏览器打开”。播放、登录和订阅条件由各来源平台决定。

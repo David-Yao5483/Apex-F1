@@ -5,8 +5,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Windows.System;
+using Windows.UI.ViewManagement;
 
 namespace ApexF1;
 
@@ -32,6 +34,8 @@ public sealed partial class MainWindow : Window
     private SourceLink? _raceDetail;
     private string _searchQuery = "";
     private bool _changingLanguage;
+    private bool _backAvailable;
+    private Storyboard? _backTransition;
 
     public MainWindow()
     {
@@ -226,11 +230,9 @@ public sealed partial class MainWindow : Window
         Describe(RefreshButton, "刷新当前页面", "Refresh current page");
         DriverStandingsItem.Text = UiLanguage.Choose("车手积分榜", "Drivers");
         TeamStandingsItem.Text = UiLanguage.Choose("车队积分榜", "Teams");
-        BackToResultsButton.Content = UiLanguage.Choose("返回分站赛果", "Back to race results");
         ExternalLabel.Text = UiLanguage.Choose("在浏览器打开", "Open in browser");
         Describe(ExternalButton, "在浏览器打开", "Open in browser");
-        Describe(CloseReaderButton, "返回目录", "Back to catalogue");
-        Describe(BackButton, "网页后退", "Go back");
+        UpdateBackNavigation();
         Describe(ForwardButton, "网页前进", "Go forward");
         if (_readerLink is { } link)
             ReaderTitle.Text = link.DisplayTitle;
@@ -281,7 +283,6 @@ public sealed partial class MainWindow : Window
             case "results" when _raceDetail is { } race:
                 ShowHub(race.Title, race.Provider, [new("官方赛果", [race])]);
                 ResultsTablePanel.Visibility = Visibility.Visible;
-                BackToResultsButton.Visibility = Visibility.Visible;
                 ResultsTable.ShowRace([]);
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
@@ -314,7 +315,6 @@ public sealed partial class MainWindow : Window
         NewsPanel.Visibility = Visibility.Collapsed;
         ResultsTablePanel.Visibility = Visibility.Collapsed;
         StandingsTabs.Visibility = Visibility.Collapsed;
-        BackToResultsButton.Visibility = Visibility.Collapsed;
         RaceRows.Visibility = Visibility.Collapsed;
         RaceRows.ItemsSource = null;
         if (!_changingLanguage)
@@ -323,6 +323,7 @@ public sealed partial class MainWindow : Window
         PageDescription.Text = UiLanguage.Translate(description);
         Groups.ItemsSource = groups.ToArray();
         UpdateRefreshButton();
+        UpdateBackNavigation();
         if (!_changingLanguage)
             Hub.ChangeView(null, 0, null, disableAnimation: true);
     }
@@ -480,18 +481,34 @@ public sealed partial class MainWindow : Window
 
         _raceDetail = race;
         ShowSection("results");
-        BackToResultsButton.Focus(FocusState.Programmatic);
+        TitleBackButton.Focus(FocusState.Programmatic);
     }
 
-    private void BackToResults_Click(object sender, RoutedEventArgs e)
+    private void TitleBack_Click(object sender, RoutedEventArgs e)
     {
-        _raceDetail = null;
-        ShowSection("results");
+        if (_webView?.CanGoBack == true)
+        {
+            _webView.GoBack();
+        }
+        else if (_readerLink is not null)
+        {
+            var origin = _readerOrigin;
+            CloseReader();
+            UpdateBackNavigation();
+            origin?.Focus(FocusState.Programmatic);
+        }
+        else if (_raceDetail is not null)
+        {
+            _raceDetail = null;
+            ShowSection("results");
+            MainTabs.SelectedItem?.Focus(FocusState.Programmatic);
+        }
     }
 
     private async Task OpenSourceAsync(SourceLink link)
     {
-        _readerOrigin = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
+        if (_readerLink is null)
+            _readerOrigin = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
         ReleaseWebView();
         _readerLink = link;
         ReaderTitle.Text = link.DisplayTitle;
@@ -583,14 +600,72 @@ public sealed partial class MainWindow : Window
 
     private void UpdateHistory()
     {
-        BackButton.IsEnabled = _webView?.CanGoBack == true;
         ForwardButton.IsEnabled = _webView?.CanGoForward == true;
+        UpdateBackNavigation();
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
+    // Detail views share this one title-bar action. History updates can change its destination without restarting the animation.
+    private void UpdateBackNavigation()
     {
+        var canGoBack = _readerLink is not null || _raceDetail is not null;
         if (_webView?.CanGoBack == true)
-            _webView.GoBack();
+            Describe(TitleBackButton, "网页后退", "Go back one web page");
+        else if (_readerLink is not null)
+            Describe(TitleBackButton, "返回上一页", "Back to the previous app page");
+        else
+            Describe(TitleBackButton, "返回分站赛果", "Back to race results");
+
+        if (_backAvailable == canGoBack)
+            return;
+
+        _backAvailable = canGoBack;
+        var startWidth = TitleBackSlot.ActualWidth;
+        var endWidth = canGoBack ? TitleBackButton.Width : 0;
+        var endOpacity = canGoBack ? 1d : 0d;
+        _backTransition?.Stop();
+        _backTransition = null;
+
+        TitleBackButton.IsHitTestVisible = canGoBack;
+        TitleBackButton.IsTabStop = canGoBack;
+        TitleBackSlot.Width = endWidth;
+        TitleBackButton.Opacity = endOpacity;
+        if (!new UISettings().AnimationsEnabled)
+        {
+            TitleBackButton.Visibility = canGoBack ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
+
+        TitleBackButton.Visibility = Visibility.Visible;
+        var transition = new Storyboard();
+        AddBackAnimation(transition, TitleBackSlot, nameof(TitleBackSlot.Width), startWidth, endWidth);
+        AddBackAnimation(transition, TitleBackButton, nameof(TitleBackButton.Opacity), startWidth / TitleBackButton.Width, endOpacity);
+        transition.Completed += (_, _) =>
+        {
+            if (_backTransition != transition)
+                return;
+
+            _backTransition = null;
+            transition.Stop();
+            if (!canGoBack)
+                TitleBackButton.Visibility = Visibility.Collapsed;
+        };
+        _backTransition = transition;
+        transition.Begin();
+    }
+
+    private static void AddBackAnimation(Storyboard transition, UIElement target, string property, double from, double to)
+    {
+        var animation = new DoubleAnimation
+        {
+            From = from,
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(240)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            EnableDependentAnimation = true
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        transition.Children.Add(animation);
     }
 
     private void Forward_Click(object sender, RoutedEventArgs e)
@@ -632,13 +707,6 @@ public sealed partial class MainWindow : Window
         if (_readerLink == currentLink)
             ShowReaderError(UiLanguage.Choose("无法打开浏览器", "Could not open the browser"),
                 UiLanguage.Choose("请检查 Windows 的默认浏览器设置。", "Check your Windows default browser settings."));
-    }
-
-    private void CloseReader_Click(object sender, RoutedEventArgs e)
-    {
-        var origin = _readerOrigin;
-        CloseReader();
-        origin?.Focus(FocusState.Programmatic);
     }
 
     private void CloseReader()
