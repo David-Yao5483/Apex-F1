@@ -6,11 +6,15 @@ public sealed record SourceLink(
     string Provider,
     string Address,
     string Glyph,
-    string Keywords = "")
+    string Keywords = "",
+    Uri? ImageUri = null)
 {
     public Uri Uri { get; } = new(Address);
+    public string DisplayTitle => UiLanguage.Translate(Title);
+    public string DisplayDescription => UiLanguage.Translate(Description);
+    public string DisplayProvider => UiLanguage.Translate(Provider);
 
-    public override string ToString() => Title;
+    public override string ToString() => DisplayTitle;
 }
 
 public sealed record LinkGroup(string Title, IReadOnlyList<SourceLink> Links);
@@ -139,8 +143,8 @@ internal static class Catalog
     {
         var terms = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return terms.Length == 0 ? [] : All
-            .Where(link => terms.All(term => Contains($"{link.Title} {link.Description} {link.Provider} {link.Keywords}", term)))
-            .OrderByDescending(link => Contains(link.Title, query.Trim()));
+            .Where(link => terms.All(term => Contains($"{link.Title} {link.DisplayTitle} {link.Description} {link.DisplayDescription} {link.Provider} {link.DisplayProvider} {link.Keywords}", term)))
+            .OrderByDescending(link => Contains(link.DisplayTitle, query.Trim()) || Contains(link.Title, query.Trim()));
     }
 
     private static bool Contains(string value, string term) => value.Contains(term, StringComparison.OrdinalIgnoreCase);

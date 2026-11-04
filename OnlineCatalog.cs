@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace ApexF1;
 
-public sealed record StandingRow(string Position, string Name, string Team, string Points);
+public sealed record StandingRow(string Position, string Name, string Team, string Points, Uri? ImageUri);
 
 internal static class OnlineCatalog
 {
@@ -12,6 +12,8 @@ internal static class OnlineCatalog
     private static readonly Uri VideoFeed = new(
         "https://api.bilibili.com/x/polymer/web-space/seasons_series_list?mid=65125803&page_num=1&page_size=10");
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
+    private static readonly Uri TeamPrincipalArticle = new(
+        "https://www.formula1.com/en/latest/article/who-are-the-2026-team-principals.2Jrw5LEJbEoX2gM5OtFL8K");
 
     internal static async Task<IReadOnlyList<SourceLink>> GetNewsAsync(CancellationToken cancellationToken)
         => ParseNews(await DownloadAsync(Catalog.News.Uri, null, cancellationToken));
@@ -21,7 +23,28 @@ internal static class OnlineCatalog
 
     internal static async Task<IReadOnlyList<StandingRow>> GetStandingsAsync(
         SourceLink source, bool drivers, CancellationToken cancellationToken)
-        => ParseStandings(await DownloadAsync(source.Uri, null, cancellationToken), drivers);
+    {
+        if (drivers || !source.Uri.AbsolutePath.StartsWith("/en/results/2026/", StringComparison.Ordinal))
+            return ParseStandings(await DownloadAsync(source.Uri, null, cancellationToken), drivers);
+
+        var standingsTask = DownloadAsync(source.Uri, null, cancellationToken);
+        var principalsTask = GetTeamPrincipalsAsync(cancellationToken);
+        await Task.WhenAll(standingsTask, principalsTask);
+        return ParseStandings(await standingsTask, drivers, await principalsTask);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, (string Name, Uri? Image)>> GetTeamPrincipalsAsync(CancellationToken token)
+    {
+        try
+        {
+            return ParseTeamPrincipals(await DownloadAsync(TeamPrincipalArticle, null, token));
+        }
+        catch (Exception ex) when (!token.IsCancellationRequested &&
+            ex is HttpRequestException or IOException or OperationCanceledException or RegexMatchTimeoutException)
+        {
+            return new Dictionary<string, (string, Uri?)>();
+        }
+    }
 
     private static async Task<string> DownloadAsync(Uri address, Uri? referrer, CancellationToken cancellationToken)
     {
@@ -35,17 +58,20 @@ internal static class OnlineCatalog
 
     internal static IReadOnlyList<SourceLink> ParseNews(string html)
     {
-        var articles = Matches(html, """<a\b[^>]*\bhref="(?<path>/en/latest/article/[^"]+)"[^>]*>(?<title>.*?)</a>""")
-            .Select(match => new
+        var articles = Matches(html, """<li\b[^>]*\bid="article-item-[^"]+"[^>]*>(?<card>.*?)</li>""")
+            .Select(match => match.Groups["card"].Value)
+            .Select(card => new
             {
-                Title = PlainText(match.Groups["title"].Value),
-                Path = WebUtility.HtmlDecode(match.Groups["path"].Value)
+                Link = Matches(card, """<a\b[^>]*\bhref="(?<path>/en/latest/article/[^"]+)"[^>]*>(?<title>.*?)</a>""").FirstOrDefault(),
+                Image = ReadImage(card)
             })
+            .Where(article => article.Link is not null)
+            .Select(article => new SourceLink(PlainText(article.Link!.Groups["title"].Value), "在应用内阅读原文",
+                "Formula 1", new Uri(Catalog.News.Uri, WebUtility.HtmlDecode(article.Link.Groups["path"].Value)).AbsoluteUri,
+                "\uE7C3", ImageUri: article.Image))
             .Where(article => article.Title.Length > 0)
-            .DistinctBy(article => article.Path)
-            .Take(12)
-            .Select(article => new SourceLink(article.Title, "在应用内阅读原文", "Formula 1",
-                new Uri(Catalog.News.Uri, article.Path).AbsoluteUri, "\uE7C3"))
+            .DistinctBy(article => article.Address)
+            .Take(6)
             .ToArray();
 
         return articles.Length > 0 ? articles : throw new FormatException("F1 article links are missing.");
@@ -105,7 +131,21 @@ internal static class OnlineCatalog
         return latest.Length > 0 ? latest : throw new FormatException("Bilibili did not return videos.");
     }
 
-    internal static IReadOnlyList<StandingRow> ParseStandings(string html, bool drivers)
+    internal static IReadOnlyDictionary<string, (string Name, Uri? Image)> ParseTeamPrincipals(string html)
+    {
+        var principals = new Dictionary<string, (string, Uri?)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var heading in Matches(html, """<h3\b[^>]*>(?<heading>.*?)</h3>(?<section>.*?)(?=<h[23]\b|</article>|\z)"""))
+        {
+            var parts = PlainText(heading.Groups["heading"].Value).Split(" – ", 2, StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && ReadImage(heading.Groups["section"].Value) is { } image)
+                principals[TeamKey(parts[1])] = (parts[0].Replace("/", " / "), image);
+        }
+
+        return principals;
+    }
+
+    internal static IReadOnlyList<StandingRow> ParseStandings(string html, bool drivers,
+        IReadOnlyDictionary<string, (string Name, Uri? Image)>? principals = null)
     {
         var tables = Matches(html, "<tbody\\b[^>]*>(?<content>.*?)</tbody>");
         foreach (var table in tables)
@@ -130,8 +170,16 @@ internal static class OnlineCatalog
                         "", RegexOptions.IgnoreCase, MatchTimeout)
                     : cells[1];
                 var name = PlainText(nameCell);
-                if (name.Length > 0)
-                    rows.Add(new StandingRow(position, name, drivers ? PlainText(cells[3]) : "", points));
+                if (name.Length == 0)
+                    continue;
+
+                if (drivers)
+                    rows.Add(new StandingRow(position, name, PlainText(cells[3]), points, ReadImage(cells[1])));
+                else
+                {
+                    var principal = principals?.GetValueOrDefault(TeamKey(name));
+                    rows.Add(new StandingRow(position, name, principal?.Name ?? "", points, principal?.Image));
+                }
             }
 
             if (rows.Count > 0)
@@ -139,6 +187,25 @@ internal static class OnlineCatalog
         }
 
         throw new FormatException("F1 standings rows are missing.");
+    }
+
+    private static string TeamKey(string name) => name switch
+    {
+        "Red Bull" => "Red Bull Racing",
+        "Haas F1 Team" or "Haas F1" => "Haas",
+        _ => name
+    };
+
+    private static Uri? ReadImage(string html)
+    {
+        foreach (var match in Matches(html, """<img\b[^>]*\bsrc="(?<src>[^"]+)"[^>]*>"""))
+        {
+            if (Uri.TryCreate(WebUtility.HtmlDecode(match.Groups["src"].Value), UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps && uri.Host == "media.formula1.com")
+                return uri;
+        }
+
+        return null;
     }
 
     private static IEnumerable<Match> Matches(string input, string pattern)
