@@ -9,7 +9,7 @@
         <MicaBackdrop Kind="BaseAlt" />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="Root" Language="zh-CN" SizeChanged="Root_SizeChanged">
+    <Grid x:Name="Root" Language="zh-CN" SizeChanged="Root_SizeChanged" KeyboardAcceleratorPlacementMode="Hidden">
         <Grid.Resources>
             <Style x:Key="IconButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="36" />
