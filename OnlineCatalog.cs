@@ -4,7 +4,13 @@ using System.Text.RegularExpressions;
 
 namespace ApexF1;
 
-public sealed record StandingRow(string Position, string Name, string Team, string Points, Uri? ImageUri);
+public sealed record TableBadge(Uri? ImageUri, string? Background);
+
+public sealed record StandingRow(string Position, string Name, string Team, string Points, Uri? ImageUri,
+    string Nationality, TableBadge? DriverBadge, TableBadge TeamBadge);
+
+public sealed record RaceClassificationRow(string Position, string Number, string Driver, string Team,
+    string Laps, string Time, string Points, TableBadge DriverBadge, TableBadge TeamBadge);
 
 internal static class OnlineCatalog
 {
@@ -12,6 +18,7 @@ internal static class OnlineCatalog
     private static readonly Uri VideoFeed = new(
         "https://api.bilibili.com/x/polymer/web-space/seasons_series_list?mid=65125803&page_num=1&page_size=10");
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
+    private const string AbbreviatedDriver = """<span\b[^>]*class="(?:[^"]*\s)?md:hidden(?:\s[^"]*)?"[^>]*>[^<]*</span>""";
     private static readonly Uri TeamPrincipalArticle = new(
         "https://www.formula1.com/en/latest/article/who-are-the-2026-team-principals.2Jrw5LEJbEoX2gM5OtFL8K");
 
@@ -20,6 +27,16 @@ internal static class OnlineCatalog
 
     internal static async Task<IReadOnlyList<SourceLink>> GetVideosAsync(CancellationToken cancellationToken)
         => ParseVideos(await DownloadAsync(VideoFeed, Catalog.BiliNews.Uri, cancellationToken));
+
+    internal static async Task<IReadOnlyList<SourceLink>> GetRaceResultsAsync(CancellationToken cancellationToken)
+        => ParseRaceResults(await DownloadAsync(Catalog.Results.Uri, null, cancellationToken));
+
+    internal static async Task<IReadOnlyList<SourceLink>> GetRaceCalendarAsync(CancellationToken cancellationToken)
+        => ParseRaceCalendar(await DownloadAsync(Catalog.Calendar.Uri, null, cancellationToken));
+
+    internal static async Task<IReadOnlyList<RaceClassificationRow>> GetRaceClassificationAsync(
+        SourceLink race, CancellationToken cancellationToken)
+        => ParseRaceClassification(await DownloadAsync(race.Uri, null, cancellationToken));
 
     internal static async Task<IReadOnlyList<StandingRow>> GetStandingsAsync(
         SourceLink source, bool drivers, CancellationToken cancellationToken)
@@ -142,6 +159,97 @@ internal static class OnlineCatalog
         return new UriBuilder(uri) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
     }
 
+    internal static IReadOnlyList<SourceLink> ParseRaceResults(string html)
+    {
+        foreach (var table in ReadTables(html))
+        {
+            var races = new List<SourceLink>();
+            foreach (var cells in table)
+            {
+                if (cells.Length != 6)
+                    continue;
+
+                var link = Matches(cells[0], """<a\b[^>]*\bhref="(?<path>/en/results/\d{4}/races/[^"]+)"[^>]*>""")
+                    .FirstOrDefault();
+                var laps = PlainText(cells[4]);
+                if (link is null || !int.TryParse(laps, out _))
+                    continue;
+
+                var title = PlainText(Regex.Replace(cells[0], "<svg\\b[^>]*>.*?</svg>", "",
+                    RegexOptions.Singleline | RegexOptions.IgnoreCase, MatchTimeout));
+                var winner = ReadDriverName(cells[2]);
+                var team = PlainText(cells[3]);
+                var time = PlainText(cells[5]);
+                var summary = UiLanguage.Choose(
+                    $"冠军 {winner} · {team} · {laps} 圈 · {time}",
+                    $"Winner {winner} · {team} · {laps} laps · {time}");
+                races.Add(new SourceLink(title, summary, PlainText(cells[1]),
+                    new Uri(Catalog.Results.Uri, WebUtility.HtmlDecode(link.Groups["path"].Value)).AbsoluteUri, "\uE9D9"));
+            }
+
+            if (races.Count > 0)
+                return races.AsEnumerable().Reverse().ToArray();
+        }
+
+        throw new FormatException("F1 race results are missing.");
+    }
+
+    internal static IReadOnlyList<RaceClassificationRow> ParseRaceClassification(string html)
+    {
+        foreach (var table in ReadTables(html))
+        {
+            var rows = new List<RaceClassificationRow>();
+            foreach (var cells in table)
+            {
+                if (cells.Length != 7)
+                    continue;
+
+                var number = PlainText(cells[1]);
+                var driver = ReadDriverName(cells[2]);
+                if (!int.TryParse(number, out _) || driver.Length == 0)
+                    continue;
+
+                rows.Add(new RaceClassificationRow(
+                    PlainText(cells[0]), number, driver, PlainText(cells[3]), PlainText(cells[4]),
+                    PlainText(cells[5]), PlainText(cells[6]), ReadBadge(cells[2]), ReadBadge(cells[3])));
+            }
+
+            if (rows.Count > 0)
+                return rows;
+        }
+
+        throw new FormatException("F1 race classification rows are missing.");
+    }
+
+    internal static IReadOnlyList<SourceLink> ParseRaceCalendar(string html)
+    {
+        var races = new List<SourceLink>();
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var match in Matches(html, """<a\b(?=[^>]*\bclass="group")(?=[^>]*\bhref="(?<path>/en/racing/\d{4}/[^"/]+)")[^>]*>(?<body>.*?)</a>"""))
+        {
+            var body = match.Groups["body"].Value;
+            var place = Matches(body, """<p\b[^>]*\bclass="[^"]*group-hover:underline[^"]*"[^>]*>(?<text>.*?)</p>""").FirstOrDefault();
+            var title = Matches(body, """>(?<text>FORMULA 1 [^<]+)</span>""").FirstOrDefault();
+            var date = Matches(body, """>(?<text>\d{1,2}(?: [A-Za-z]{3})?\s*[-–]\s*\d{1,2} [A-Za-z]{3})</span>""").FirstOrDefault();
+            var round = Matches(body, """>(?<text>ROUND \d+|TESTING)</span>""").FirstOrDefault();
+            var path = WebUtility.HtmlDecode(match.Groups["path"].Value);
+            if (place is null || title is null || date is null || !paths.Add(path))
+                continue;
+
+            var label = round?.Groups["text"].Value ?? "";
+            if (!UiLanguage.English)
+                label = label == "TESTING" ? "季前测试" : label.Replace("ROUND ", "第 ") + (label.Length > 0 ? " 站" : "");
+            var dateLabel = PlainText(date.Groups["text"].Value);
+            if (label.Length > 0)
+                dateLabel = label + " · " + dateLabel;
+
+            races.Add(new SourceLink(PlainText(place.Groups["text"].Value), PlainText(title.Groups["text"].Value),
+                dateLabel, new Uri(Catalog.Calendar.Uri, path).AbsoluteUri, "\uE787"));
+        }
+
+        return races.Count > 0 ? races : throw new FormatException("F1 calendar events are missing.");
+    }
+
     internal static IReadOnlyDictionary<string, (string Name, Uri? Image)> ParseTeamPrincipals(string html)
     {
         var principals = new Dictionary<string, (string, Uri?)>(StringComparer.OrdinalIgnoreCase);
@@ -158,15 +266,11 @@ internal static class OnlineCatalog
     internal static IReadOnlyList<StandingRow> ParseStandings(string html, bool drivers,
         IReadOnlyDictionary<string, (string Name, Uri? Image)>? principals = null)
     {
-        var tables = Matches(html, "<tbody\\b[^>]*>(?<content>.*?)</tbody>");
-        foreach (var table in tables)
+        foreach (var table in ReadTables(html))
         {
             var rows = new List<StandingRow>();
-            foreach (var row in Matches(table.Groups["content"].Value, "<tr\\b[^>]*>(?<content>.*?)</tr>"))
+            foreach (var cells in table)
             {
-                var cells = Matches(row.Groups["content"].Value, "<td\\b[^>]*>(?<content>.*?)</td>")
-                    .Select(match => match.Groups["content"].Value)
-                    .ToArray();
                 if (cells.Length != (drivers ? 5 : 3))
                     continue;
 
@@ -176,20 +280,21 @@ internal static class OnlineCatalog
                     System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out _))
                     continue;
 
-                var nameCell = drivers
-                    ? Regex.Replace(cells[1], """<span\b[^>]*class="(?:[^"]*\s)?md:hidden(?:\s[^"]*)?"[^>]*>[^<]*</span>""",
-                        "", RegexOptions.IgnoreCase, MatchTimeout)
-                    : cells[1];
-                var name = PlainText(nameCell);
+                var name = drivers ? ReadDriverName(cells[1]) : PlainText(cells[1]);
                 if (name.Length == 0)
                     continue;
 
                 if (drivers)
-                    rows.Add(new StandingRow(position, name, PlainText(cells[3]), points, ReadImage(cells[1])));
+                {
+                    var driver = ReadBadge(cells[1]);
+                    rows.Add(new StandingRow(position, name, PlainText(cells[3]), points, driver.ImageUri,
+                        PlainText(cells[2]), driver, ReadBadge(cells[3])));
+                }
                 else
                 {
                     var principal = principals?.GetValueOrDefault(TeamKey(name));
-                    rows.Add(new StandingRow(position, name, principal?.Name ?? "", points, principal?.Image));
+                    rows.Add(new StandingRow(position, name, principal?.Name ?? "", points, principal?.Image,
+                        "", null, ReadBadge(cells[1])));
                 }
             }
 
@@ -198,6 +303,21 @@ internal static class OnlineCatalog
         }
 
         throw new FormatException("F1 standings rows are missing.");
+    }
+
+    private static IEnumerable<IEnumerable<string[]>> ReadTables(string html)
+        => Matches(html, "<tbody\\b[^>]*>(?<content>.*?)</tbody>").Select(table =>
+            Matches(table.Groups["content"].Value, "<tr\\b[^>]*>(?<content>.*?)</tr>").Select(row =>
+                Matches(row.Groups["content"].Value, "<td\\b[^>]*>(?<content>.*?)</td>")
+                    .Select(cell => cell.Groups["content"].Value).ToArray()));
+
+    private static string ReadDriverName(string cell)
+        => PlainText(Regex.Replace(cell, AbbreviatedDriver, "", RegexOptions.IgnoreCase, MatchTimeout));
+
+    private static TableBadge ReadBadge(string cell)
+    {
+        var color = Matches(cell, """background-color\s*:\s*(?<hex>#[0-9a-f]{6})(?=[";\s])""").FirstOrDefault();
+        return new TableBadge(ReadImage(cell), color?.Groups["hex"].Value);
     }
 
     private static string TeamKey(string name) => name switch

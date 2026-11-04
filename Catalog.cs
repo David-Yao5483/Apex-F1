@@ -22,14 +22,6 @@ public sealed record LinkGroup(string Title, IReadOnlyList<SourceLink> Links)
     public string DisplayTitle => UiLanguage.Translate(Title);
 }
 
-internal sealed record Feature(
-    string Label,
-    string Title,
-    string Description,
-    string Action,
-    SourceLink? Link,
-    string Art);
-
 internal static class Catalog
 {
     private const string F1 = "https://www.formula1.com";
@@ -44,7 +36,7 @@ internal static class Catalog
     internal static readonly SourceLink F1Home = Official("F1 官网首页", "官方头条、精选内容和完整站点导航。", "/en", "\uE774", "官网 主页 首页 Formula1");
     internal static readonly SourceLink News = Official("最新资讯", "围场新闻、专访和官方分析。", "/en/latest", "\uE7C3", "新闻 news");
     internal static readonly SourceLink Calendar = Official("赛历与赛程", "各站大奖赛日期、赛道和分节时间。", $"/en/racing/{Season}", "\uE787", "时间 正赛 排位 冲刺 练习 schedule calendar");
-    internal static readonly SourceLink Results = Official("比赛成绩", "分站赛果和历年成绩档案。", "/en/results", "\uE9D9", "历史 冠军 results");
+    internal static readonly SourceLink Results = Official("比赛成绩", "分站赛果和历年成绩档案。", $"/en/results/{Season}/races", "\uE9D9", "历史 冠军 results");
     internal static readonly SourceLink Standings = Official("车手积分", "世界车手锦标赛官方积分榜。", $"/en/results/{Season}/drivers", "\uECA5", "排名 车手积分榜 standings");
     internal static readonly SourceLink TeamStandings = Official("车队积分", "世界车队锦标赛官方积分榜。", $"/en/results/{Season}/team", "\uECA5", "车队排名 constructors standings");
     internal static readonly SourceLink Video = Official("官方视频", "比赛集锦、车载镜头和围场节目。", "/en/video", "\uE714", "回放 精彩瞬间 video highlights");
@@ -58,14 +50,6 @@ internal static class Catalog
         BiliNews.Address + "/video", "\uE714");
     internal static readonly SourceLink Masha = new("马莎拉车", "胡闹 P 房的赛事解说和车迷内容。", "哔哩哔哩", "https://space.bilibili.com/1313650809", "\uE8BD", "B站 bilibili 玛莎拉车 马沙拉车 UP主");
     internal static readonly SourceLink MashaLive = new("马莎拉车 · 数据直播间", "查看 B 站直播间的开播状态和赛事数据解说。", "哔哩哔哩", "https://live.bilibili.com/23954427", "\uEC15", "B站 bilibili 胡闹P房");
-
-    internal static readonly LinkGroup[] Home =
-    [
-        new("快速访问", [Calendar, News, Results, Standings]),
-        new("观赛入口", [Cctv5, Cctv5Plus, F1Tv, Timing]),
-        new("中文创作者", [BiliNews, Masha]),
-        new("探索 F1 官网", [F1Home])
-    ];
 
     internal static readonly LinkGroup[] OfficialSite =
     [
@@ -130,13 +114,6 @@ internal static class Catalog
     internal static readonly LinkGroup[] Creators =
     [
         new("哔哩哔哩", [BiliNews, Masha, MashaLive])
-    ];
-
-    internal static readonly Feature[] Features =
-    [
-        new("FORMULA 1", "F1 赛事中心", "从赛程、官方新闻到实时计时，跟进每个大奖赛周末。", "查看官方赛历", Calendar, "Race"),
-        new("CCTV 体育", "跟着央视看 F1", "打开央视赛车专区，查看转播预告、频道直播和比赛视频。", "进入赛车专区", CctvRacing, "Watch"),
-        new("BILIBILI", "围场之外", "查看 F1赛事资讯的赛前前瞻和赛后复盘。", "查看新闻与视频", null, "Community")
     ];
 
     internal static readonly SourceLink[] All = OfficialSite.Concat(Watch).Concat(Creators)

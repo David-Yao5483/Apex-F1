@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 using Windows.System;
 
@@ -17,13 +16,14 @@ public sealed partial class MainWindow : Window
     private static readonly string ThemeFile = Path.Combine(DataFolder, "theme.txt");
     private static readonly string LanguageFile = Path.Combine(DataFolder, "language.txt");
 
-    private int _featureIndex;
     private WebView2? _webView;
     private SourceLink? _readerLink;
     private Control? _readerOrigin;
     private CancellationTokenSource? _onlineRequest;
     private IReadOnlyList<SourceLink> _news = [];
     private IReadOnlyList<SourceLink> _videos = [];
+    private IReadOnlyList<SourceLink> _raceOverview = [];
+    private SourceLink? _raceDetail;
     private string _searchQuery = "";
     private bool _changingLanguage;
 
@@ -42,9 +42,8 @@ public sealed partial class MainWindow : Window
         ApplyLanguage();
         Root.ActualThemeChanged += (_, _) => UpdateTheme();
         UpdateTheme();
-        RenderFeature();
         StandingsTabs.SelectedItem = DriverStandingsItem;
-        MainTabs.SelectedItem = HomeItem;
+        MainTabs.SelectedItem = NewsItem;
         Closed += (_, _) =>
         {
             _onlineRequest?.Cancel();
@@ -76,9 +75,6 @@ public sealed partial class MainWindow : Window
     {
         var compact = e.NewSize.Width < 700;
         HubContent.Margin = compact ? new Thickness(14, 14, 14, 0) : new Thickness(28, 18, 28, 0);
-        Hero.Height = compact ? 296 : 326;
-        HeroTitle.FontSize = compact ? 32 : 40;
-        HeroArt.Opacity = compact ? 0.55 : 1;
         ExternalLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -127,7 +123,6 @@ public sealed partial class MainWindow : Window
         UiLanguage.English = !UiLanguage.English;
         SavePreference(LanguageFile, UiLanguage.Choose("zh-CN", "en"));
         ApplyLanguage();
-        RenderFeature();
         UpdateTheme();
         SearchBox.ItemsSource = null;
         _changingLanguage = true;
@@ -163,7 +158,7 @@ public sealed partial class MainWindow : Window
                 "results" => "赛果",
                 "calendar" => "赛历",
                 "watch" => "观赛",
-                _ => "首页"
+                _ => "新闻"
             });
         }
 
@@ -171,20 +166,15 @@ public sealed partial class MainWindow : Window
         ReadMoreButton.Content = UiLanguage.Choose("阅读更多", "Read more");
         VideosHeading.Text = UiLanguage.Translate("F1赛事资讯 · 最新视频");
         WatchMoreButton.Content = UiLanguage.Choose("观看更多", "Watch more");
-        RefreshOnlineButton.Content = UiLanguage.Choose("刷新", "Refresh");
+        Describe(RefreshButton, "刷新当前页面", "Refresh current page");
         DriverStandingsItem.Text = UiLanguage.Choose("车手积分榜", "Drivers");
         TeamStandingsItem.Text = UiLanguage.Choose("车队积分榜", "Teams");
-        RankHeader.Text = UiLanguage.Choose("名次", "Rank");
-        NameHeader.Text = UiLanguage.Choose("车手 / 车队", "Driver / team");
-        PointsHeader.Text = UiLanguage.Choose("积分", "Points");
+        BackToResultsButton.Content = UiLanguage.Choose("返回分站赛果", "Back to race results");
         ExternalLabel.Text = UiLanguage.Choose("在浏览器打开", "Open in browser");
         Describe(ExternalButton, "在浏览器打开", "Open in browser");
         Describe(CloseReaderButton, "返回目录", "Back to catalogue");
         Describe(BackButton, "网页后退", "Go back");
         Describe(ForwardButton, "网页前进", "Go forward");
-        Describe(RefreshReaderButton, "刷新网页", "Reload page");
-        Describe(PreviousFeatureButton, "上一张焦点卡片", "Previous feature");
-        Describe(NextFeatureButton, "下一张焦点卡片", "Next feature");
         if (_readerLink is { } link)
             ReaderTitle.Text = link.DisplayTitle;
     }
@@ -208,6 +198,7 @@ public sealed partial class MainWindow : Window
 
     private void MainTabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
+        _raceDetail = null;
         if (sender.SelectedItem?.Tag is string section)
             ShowSection(section);
     }
@@ -222,43 +213,56 @@ public sealed partial class MainWindow : Window
                 VideoCards.ItemsSource = _videos;
                 NewsPanel.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
-                _ = RefreshOnlineAsync();
                 break;
             case "standings":
                 ShowHub("积分榜", "查看本赛季 Formula 1 官方积分。", StandingLinks());
                 OnlineControls.Visibility = Visibility.Visible;
                 StandingsPanel.Visibility = Visibility.Visible;
-                _ = RefreshOnlineAsync();
+                ShowStandingTable([]);
+                break;
+            case "results" when _raceDetail is { } race:
+                ShowHub(race.Title, race.Provider, [new("官方赛果", [race])]);
+                RaceDetailTable.ShowRace([]);
+                RaceDetailPanel.Visibility = Visibility.Visible;
+                OnlineControls.Visibility = Visibility.Visible;
                 break;
             case "results":
-                ShowHub("赛果", "查看各站正赛、排位、冲刺赛和历年成绩。", [new("官方赛果", [Catalog.Results])]);
+                ShowHub("赛果", "查看本赛季各站的正赛冠军、车队、圈数和完赛时间。", [new("官方赛果", [Catalog.Results])]);
+                RaceRows.ItemsSource = _raceOverview;
+                RaceRows.Visibility = Visibility.Visible;
+                OnlineControls.Visibility = Visibility.Visible;
                 break;
             case "calendar":
                 ShowHub("赛历", "查看各站大奖赛、赛道和分节时间。", [new("官方赛历", [Catalog.Calendar])]);
+                RaceRows.Visibility = Visibility.Visible;
+                OnlineControls.Visibility = Visibility.Visible;
                 break;
             case "watch":
                 ShowHub("观赛", "央视赛事转播以节目单为准。F1 TV 的直播和回放取决于所在地区及订阅。", [.. Catalog.Watch, .. Catalog.Creators]);
                 break;
-            default:
-                ShowHub("首页", "", Catalog.Home, isHome: true);
-                break;
         }
+
+        UpdateRefreshButton();
+        if (OnlineControls.Visibility == Visibility.Visible)
+            _ = RefreshOnlineAsync();
     }
 
-    private void ShowHub(string title, string description, IReadOnlyList<LinkGroup> groups, bool isHome = false)
+    private void ShowHub(string title, string description, IReadOnlyList<LinkGroup> groups)
     {
         _onlineRequest?.Cancel();
         _onlineRequest = null;
         OnlineControls.Visibility = Visibility.Collapsed;
         NewsPanel.Visibility = Visibility.Collapsed;
         StandingsPanel.Visibility = Visibility.Collapsed;
+        RaceDetailPanel.Visibility = Visibility.Collapsed;
+        RaceRows.Visibility = Visibility.Collapsed;
+        RaceRows.ItemsSource = null;
         if (!_changingLanguage)
             CloseReader();
         PageTitle.Text = UiLanguage.Translate(title);
         PageDescription.Text = UiLanguage.Translate(description);
-        PageHeading.Visibility = isHome ? Visibility.Collapsed : Visibility.Visible;
-        Hero.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
         Groups.ItemsSource = groups.ToArray();
+        UpdateRefreshButton();
         if (!_changingLanguage)
             Hub.ChangeView(null, 0, null, disableAnimation: true);
     }
@@ -277,12 +281,18 @@ public sealed partial class MainWindow : Window
         if (StandingsPanel.Visibility != Visibility.Visible)
             return;
 
-        StandingRows.ItemsSource = null;
+        ShowStandingTable([]);
         Groups.ItemsSource = StandingLinks();
         _ = RefreshOnlineAsync();
     }
 
-    private async void RefreshOnline_Click(object sender, RoutedEventArgs e) => await RefreshOnlineAsync();
+    private void ShowStandingTable(IReadOnlyList<StandingRow> rows)
+    {
+        if (SelectedStanding == Catalog.Standings)
+            StandingsTable.ShowDrivers(rows);
+        else
+            StandingsTable.ShowTeams(rows);
+    }
 
     private async Task RefreshOnlineAsync()
     {
@@ -293,20 +303,33 @@ public sealed partial class MainWindow : Window
         F1FeedError.IsOpen = false;
         BiliFeedError.IsOpen = false;
 
-        if (MainTabs.SelectedItem?.Tag as string == "news")
+        switch (MainTabs.SelectedItem?.Tag as string)
         {
-            await Task.WhenAll(
-                UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => NewsCards.ItemsSource = _news = links,
-                    F1FeedError, UiLanguage.Translate("F1 官网新闻"), request),
-                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => VideoCards.ItemsSource = _videos = links,
-                    BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
-        }
-        else
-        {
-            var source = SelectedStanding;
-            await UpdateFeedAsync(
-                () => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token),
-                rows => StandingRows.ItemsSource = rows, F1FeedError, source.DisplayTitle, request);
+            case "news":
+                await Task.WhenAll(
+                    UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => NewsCards.ItemsSource = _news = links,
+                        F1FeedError, UiLanguage.Translate("F1 官网新闻"), request),
+                    UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => VideoCards.ItemsSource = _videos = links,
+                        BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
+                break;
+            case "standings":
+                var source = SelectedStanding;
+                await UpdateFeedAsync(
+                    () => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token),
+                    ShowStandingTable, F1FeedError, source.DisplayTitle, request);
+                break;
+            case "results" when _raceDetail is { } race:
+                await UpdateFeedAsync(() => OnlineCatalog.GetRaceClassificationAsync(race, request.Token),
+                    RaceDetailTable.ShowRace, F1FeedError, race.DisplayTitle, request);
+                break;
+            case "results":
+                await UpdateFeedAsync(() => OnlineCatalog.GetRaceResultsAsync(request.Token),
+                    rows => RaceRows.ItemsSource = _raceOverview = rows, F1FeedError, Catalog.Results.DisplayTitle, request);
+                break;
+            case "calendar":
+                await UpdateFeedAsync(() => OnlineCatalog.GetRaceCalendarAsync(request.Token),
+                    rows => RaceRows.ItemsSource = rows, F1FeedError, Catalog.Calendar.DisplayTitle, request);
+                break;
         }
 
         if (_onlineRequest == request)
@@ -337,37 +360,6 @@ public sealed partial class MainWindow : Window
             error.Message = UiLanguage.Choose("可以重试刷新，或打开下方的来源页面。", "Try again or open the source page below.");
             error.IsOpen = true;
         }
-    }
-
-    private void RenderFeature()
-    {
-        var feature = Catalog.Features[_featureIndex];
-        HeroLabel.Text = UiLanguage.Translate(feature.Label);
-        HeroTitle.Text = UiLanguage.Translate(feature.Title);
-        HeroDescription.Text = UiLanguage.Translate(feature.Description);
-        HeroAction.Content = UiLanguage.Translate(feature.Action);
-        HeroArt.Source = new SvgImageSource(new Uri($"ms-appx:///Assets/{feature.Art}.svg"));
-        FeatureIndex.Text = $"{_featureIndex + 1} / {Catalog.Features.Length}";
-    }
-
-    private void PreviousFeature_Click(object sender, RoutedEventArgs e)
-    {
-        _featureIndex = (_featureIndex + Catalog.Features.Length - 1) % Catalog.Features.Length;
-        RenderFeature();
-    }
-
-    private void NextFeature_Click(object sender, RoutedEventArgs e)
-    {
-        _featureIndex = (_featureIndex + 1) % Catalog.Features.Length;
-        RenderFeature();
-    }
-
-    private async void HeroAction_Click(object sender, RoutedEventArgs e)
-    {
-        if (Catalog.Features[_featureIndex].Link is SourceLink link)
-            await OpenSourceAsync(link);
-        else
-            MainTabs.SelectedItem = NewsItem;
     }
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
@@ -415,6 +407,28 @@ public sealed partial class MainWindow : Window
             await OpenSourceAsync(link);
     }
 
+    private async void RaceRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SourceLink race })
+            return;
+
+        if (MainTabs.SelectedItem?.Tag as string != "results")
+        {
+            await OpenSourceAsync(race);
+            return;
+        }
+
+        _raceDetail = race;
+        ShowSection("results");
+        BackToResultsButton.Focus(FocusState.Programmatic);
+    }
+
+    private void BackToResults_Click(object sender, RoutedEventArgs e)
+    {
+        _raceDetail = null;
+        ShowSection("results");
+    }
+
     private async Task OpenSourceAsync(SourceLink link)
     {
         _readerOrigin = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
@@ -426,6 +440,7 @@ public sealed partial class MainWindow : Window
         ReaderProgress.Visibility = Visibility.Visible;
         Hub.Visibility = Visibility.Collapsed;
         Reader.Visibility = Visibility.Visible;
+        UpdateRefreshButton();
 
         var view = new WebView2();
         _webView = view;
@@ -530,7 +545,12 @@ public sealed partial class MainWindow : Window
             core.Reload();
         else if (_readerLink is { } link)
             await OpenSourceAsync(link);
+        else if (OnlineControls.Visibility == Visibility.Visible)
+            await RefreshOnlineAsync();
     }
+
+    private void UpdateRefreshButton() =>
+        RefreshButton.IsEnabled = _readerLink is not null || OnlineControls.Visibility == Visibility.Visible;
 
     private async void OpenExternal_Click(object sender, RoutedEventArgs e)
     {
@@ -568,6 +588,7 @@ public sealed partial class MainWindow : Window
         _readerOrigin = null;
         Reader.Visibility = Visibility.Collapsed;
         Hub.Visibility = Visibility.Visible;
+        UpdateRefreshButton();
     }
 
     private void ReleaseWebView()

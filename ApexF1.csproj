@@ -24,7 +24,8 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.4" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.4" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" PrivateAssets="all" />
-    <Content Include="Assets\*.svg;Assets\ApexF1.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Mark.svg;Assets\ApexF1.ico;Assets\TitilliumWeb-SemiBold.ttf;Assets\TitilliumWeb-OFL.txt"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Carry the unpackaged app's generated XAML and resource index into the publish directory. -->

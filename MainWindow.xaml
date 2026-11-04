@@ -70,16 +70,35 @@
                         <Border Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="7,7,0,0">
                             <Grid>
                                 <FontIcon Glyph="{x:Bind Glyph}" FontSize="26" />
-                                <Image Stretch="UniformToFill">
-                                    <Image.Source>
-                                        <BitmapImage UriSource="{x:Bind ImageUri}" DecodePixelWidth="640" />
-                                    </Image.Source>
-                                </Image>
+                                <Image Stretch="UniformToFill" local:CachedImage.RemoteUri="{x:Bind ImageUri}" />
                             </Grid>
                         </Border>
                         <TextBlock Grid.Row="1" Text="{x:Bind Title}" Margin="12,8" VerticalAlignment="Center"
                                    Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"
                                    MaxLines="2" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </Button>
+            </DataTemplate>
+            <DataTemplate x:Key="RaceRowTemplate" x:DataType="local:SourceLink">
+                <Button Click="RaceRow_Click" Tag="{x:Bind}" AutomationProperties.Name="{x:Bind Title}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="76" Padding="14,10"
+                        CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="116" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Bind Provider}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{x:Bind Description}" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="11" />
                     </Grid>
                 </Button>
             </DataTemplate>
@@ -123,16 +142,22 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Button x:Name="ThemeButton" Style="{StaticResource IconButtonStyle}" Click="ThemeButton_Click"
                             VerticalAlignment="Center" AutomationProperties.Name="切换深浅主题">
                         <FontIcon x:Name="ThemeIcon" FontSize="16" />
                     </Button>
-                    <Button x:Name="LanguageButton" Grid.Column="1" Click="LanguageButton_Click"
+                    <Button x:Name="RefreshButton" Grid.Column="1" Style="{StaticResource IconButtonStyle}"
+                            Click="Refresh_Click" VerticalAlignment="Center" IsEnabled="False"
+                            AutomationProperties.Name="刷新当前页面">
+                        <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                    </Button>
+                    <Button x:Name="LanguageButton" Grid.Column="2" Click="LanguageButton_Click"
                             VerticalAlignment="Center" Content="EN" />
                     <AutoSuggestBox x:Name="SearchBox"
-                                    Grid.Column="2"
+                                    Grid.Column="3"
                                     MaxWidth="550"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Center"
@@ -147,7 +172,6 @@
 
         <SelectorBar x:Name="MainTabs" Grid.Row="1" HorizontalAlignment="Center" Margin="8,2,8,8"
                      AutomationProperties.Name="主导航" SelectionChanged="MainTabs_SelectionChanged">
-            <SelectorBarItem x:Name="HomeItem" Tag="home" Text="首页" />
             <SelectorBarItem x:Name="NewsItem" Tag="news" Text="新闻" />
             <SelectorBarItem Tag="standings" Text="积分榜" />
             <SelectorBarItem Tag="results" Text="赛果" />
@@ -164,8 +188,8 @@
                     <ScrollViewer x:Name="Hub" HorizontalScrollMode="Disabled"
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="HubContent" MaxWidth="1520" Margin="28,18,28,0" Spacing="18">
-                            <StackPanel x:Name="PageHeading" Spacing="4">
-                                <TextBlock x:Name="PageTitle" Text="首页"
+                            <StackPanel Spacing="4">
+                                <TextBlock x:Name="PageTitle" Text="新闻"
                                            Style="{StaticResource TitleTextBlockStyle}"
                                            AutomationProperties.HeadingLevel="Level1" />
                                 <TextBlock x:Name="PageDescription" TextWrapping="Wrap"
@@ -173,63 +197,7 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
 
-                            <Border x:Name="Hero" CornerRadius="10" Height="326" Background="#101E3B">
-                                <Grid x:Name="HeroContent" RequestedTheme="Dark">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="2*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Image x:Name="HeroArt" Grid.Column="1" Stretch="Fill"
-                                           IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                                    <Grid Grid.ColumnSpan="2" IsHitTestVisible="False">
-                                        <Grid.Background>
-                                            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                                                <GradientStop Color="#FF101E3B" Offset="0" />
-                                                <GradientStop Color="#FF101E3B" Offset="0.25" />
-                                                <GradientStop Color="#E6101E3B" Offset="0.42" />
-                                                <GradientStop Color="#22101E3B" Offset="0.74" />
-                                                <GradientStop Color="#00101E3B" Offset="1" />
-                                            </LinearGradientBrush>
-                                        </Grid.Background>
-                                    </Grid>
-
-                                    <StackPanel Grid.ColumnSpan="2" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                MaxWidth="410" Margin="28,0,22,38" Spacing="8">
-                                        <StackPanel Orientation="Horizontal" Spacing="9">
-                                            <Border Width="4" Height="14" Background="#FF839FFF" CornerRadius="2" />
-                                            <TextBlock x:Name="HeroLabel" Style="{StaticResource CaptionTextBlockStyle}"
-                                                       FontWeight="SemiBold" CharacterSpacing="90" Foreground="#FFC5D4FF" />
-                                        </StackPanel>
-                                        <TextBlock x:Name="HeroTitle" Style="{StaticResource TitleLargeTextBlockStyle}"
-                                                   Foreground="White" TextWrapping="Wrap" />
-                                        <TextBlock x:Name="HeroDescription" MaxWidth="340" HorizontalAlignment="Left"
-                                                   TextWrapping="Wrap" Foreground="#FFE6EDFF"
-                                                   Style="{StaticResource BodyTextBlockStyle}" />
-                                        <Button x:Name="HeroAction" Click="HeroAction_Click" Margin="0,12,0,0"
-                                                MinHeight="36" Padding="16,0" Style="{StaticResource AccentButtonStyle}" />
-                                    </StackPanel>
-
-                                    <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8"
-                                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,14,14">
-                                        <Border Background="#B3101E3B" CornerRadius="16" Padding="10,5">
-                                            <TextBlock x:Name="FeatureIndex" Foreground="White"
-                                                       AutomationProperties.LiveSetting="Polite"
-                                                       Style="{StaticResource CaptionTextBlockStyle}" />
-                                        </Border>
-                                        <Button x:Name="PreviousFeatureButton" Click="PreviousFeature_Click" Width="32" Height="32" Padding="0"
-                                                ToolTipService.ToolTip="上一张" AutomationProperties.Name="上一张焦点卡片">
-                                            <FontIcon Glyph="&#xE76B;" FontSize="12" />
-                                        </Button>
-                                        <Button x:Name="NextFeatureButton" Click="NextFeature_Click" Width="32" Height="32" Padding="0"
-                                                ToolTipService.ToolTip="下一张" AutomationProperties.Name="下一张焦点卡片">
-                                            <FontIcon Glyph="&#xE76C;" FontSize="12" />
-                                        </Button>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-
                             <StackPanel x:Name="OnlineControls" Visibility="Collapsed" Spacing="8">
-                                <Button x:Name="RefreshOnlineButton" Content="刷新" Click="RefreshOnline_Click" />
                                 <ProgressBar x:Name="OnlineProgress" IsIndeterminate="True" Visibility="Collapsed" />
                                 <InfoBar x:Name="F1FeedError" Severity="Warning" IsClosable="False" />
                                 <InfoBar x:Name="BiliFeedError" Severity="Warning" IsClosable="False" />
@@ -263,58 +231,18 @@
                                     <SelectorBarItem x:Name="DriverStandingsItem" Text="车手积分榜" />
                                     <SelectorBarItem x:Name="TeamStandingsItem" Text="车队积分榜" />
                                 </SelectorBar>
-                                <Grid Padding="14,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="54" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="72" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="RankHeader" Text="名次" Style="{StaticResource CaptionTextBlockStyle}" />
-                                    <TextBlock x:Name="NameHeader" Grid.Column="1" Text="车手 / 车队" Style="{StaticResource CaptionTextBlockStyle}" />
-                                    <TextBlock x:Name="PointsHeader" Grid.Column="2" Text="积分" HorizontalAlignment="Right"
-                                               Style="{StaticResource CaptionTextBlockStyle}" />
-                                </Grid>
-                                <ItemsControl x:Name="StandingRows">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:StandingRow">
-                                            <Grid Padding="14,10" Margin="0,0,0,2"
-                                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="54" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="72" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{x:Bind Position}" VerticalAlignment="Center" />
-                                                <Grid Grid.Column="1" ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="52" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Border Height="52" Width="52" CornerRadius="8"
-                                                            Background="{ThemeResource LayerFillColorDefaultBrush}">
-                                                        <Grid>
-                                                            <FontIcon Glyph="&#xE77B;" FontSize="18" />
-                                                            <Image Stretch="UniformToFill">
-                                                                <Image.Source>
-                                                                    <BitmapImage UriSource="{x:Bind ImageUri}" DecodePixelWidth="104" />
-                                                                </Image.Source>
-                                                            </Image>
-                                                        </Grid>
-                                                    </Border>
-                                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap"
-                                                               Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                                    <TextBlock Text="{x:Bind Team}" TextWrapping="Wrap"
-                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                    </StackPanel>
-                                                </Grid>
-                                                <TextBlock Grid.Column="2" Text="{x:Bind Points}" HorizontalAlignment="Right"
-                                                           VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <local:NativeResultsTable x:Name="StandingsTable" />
                             </StackPanel>
+                            <StackPanel x:Name="RaceDetailPanel" Visibility="Collapsed" Spacing="10">
+                                <Button x:Name="BackToResultsButton" Content="返回分站赛果" Click="BackToResults_Click"
+                                        HorizontalAlignment="Left" />
+                                <local:NativeResultsTable x:Name="RaceDetailTable" />
+                            </StackPanel>
+                            <ItemsRepeater x:Name="RaceRows" Visibility="Collapsed" ItemTemplate="{StaticResource RaceRowTemplate}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Spacing="8" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
                             <ItemsRepeater x:Name="Groups" ItemTemplate="{StaticResource LinkGroupTemplate}" />
                         </StackPanel>
                     </ScrollViewer>
@@ -342,10 +270,6 @@
                                 <Button x:Name="ForwardButton" Style="{StaticResource IconButtonStyle}" Click="Forward_Click"
                                         ToolTipService.ToolTip="网页前进" AutomationProperties.Name="网页前进">
                                     <FontIcon Glyph="&#xE72A;" FontSize="15" />
-                                </Button>
-                                <Button x:Name="RefreshReaderButton" Style="{StaticResource IconButtonStyle}" Click="Refresh_Click"
-                                        ToolTipService.ToolTip="刷新网页" AutomationProperties.Name="刷新网页">
-                                    <FontIcon Glyph="&#xE72C;" FontSize="15" />
                                 </Button>
                             </StackPanel>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
