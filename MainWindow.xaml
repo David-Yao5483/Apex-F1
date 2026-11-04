@@ -57,7 +57,7 @@
                     </Grid>
                 </Button>
             </DataTemplate>
-            <DataTemplate x:Key="NewsCardTemplate" x:DataType="local:SourceLink">
+            <DataTemplate x:Key="CoverCardTemplate" x:DataType="local:SourceLink">
                 <Button Click="SourceCard_Click" Tag="{x:Bind}" AutomationProperties.Name="{x:Bind Title}"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Height="216" Padding="0"
                         CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -69,7 +69,7 @@
                         </Grid.RowDefinitions>
                         <Border Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="7,7,0,0">
                             <Grid>
-                                <FontIcon Glyph="&#xE7C3;" FontSize="26" />
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="26" />
                                 <Image Stretch="UniformToFill">
                                     <Image.Source>
                                         <BitmapImage UriSource="{x:Bind ImageUri}" DecodePixelWidth="640" />
@@ -237,7 +237,7 @@
                             <StackPanel x:Name="NewsPanel" Visibility="Collapsed" Spacing="12" Margin="0,0,0,12">
                                 <TextBlock x:Name="NewsHeading" Text="F1 官网新闻" Style="{StaticResource SubtitleTextBlockStyle}"
                                            AutomationProperties.HeadingLevel="Level2" />
-                                <ItemsRepeater x:Name="NewsCards" ItemTemplate="{StaticResource NewsCardTemplate}">
+                                <ItemsRepeater x:Name="NewsCards" ItemTemplate="{StaticResource CoverCardTemplate}">
                                     <ItemsRepeater.Layout>
                                         <UniformGridLayout MinItemWidth="110" MinItemHeight="216" MaximumRowsOrColumns="3"
                                                            MinColumnSpacing="12" MinRowSpacing="12" ItemsStretch="Fill" />
@@ -245,6 +245,17 @@
                                 </ItemsRepeater>
                                 <Button x:Name="ReadMoreButton" Content="阅读更多" HorizontalAlignment="Left"
                                         Click="ReadMore_Click" />
+                                <TextBlock x:Name="VideosHeading" Text="F1赛事资讯 · 最新视频" Margin="0,12,0,0"
+                                           Style="{StaticResource SubtitleTextBlockStyle}"
+                                           AutomationProperties.HeadingLevel="Level2" />
+                                <ItemsRepeater x:Name="VideoCards" ItemTemplate="{StaticResource CoverCardTemplate}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout MinItemWidth="110" MinItemHeight="216" MaximumRowsOrColumns="3"
+                                                           MinColumnSpacing="12" MinRowSpacing="12" ItemsStretch="Fill" />
+                                    </ItemsRepeater.Layout>
+                                </ItemsRepeater>
+                                <Button x:Name="WatchMoreButton" Content="观看更多" HorizontalAlignment="Left"
+                                        Click="WatchMore_Click" />
                             </StackPanel>
                             <StackPanel x:Name="StandingsPanel" Visibility="Collapsed" Spacing="12" Margin="0,0,0,18">
                                 <SelectorBar x:Name="StandingsTabs" AutomationProperties.Name="积分榜类别"

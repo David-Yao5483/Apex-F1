@@ -54,6 +54,8 @@ internal static class Catalog
     internal static readonly SourceLink Cctv5 = Cctv("CCTV-5 体育", "打开央视体育频道官方直播页。", "https://tv.cctv.com/live/cctv5/", "\uE7F4", "央视 五套 cctv5 直播");
     internal static readonly SourceLink Cctv5Plus = Cctv("CCTV-5+ 体育赛事", "打开央视体育赛事频道官方直播页。", "https://tv.cctv.com/live/cctv5plus/", "\uE7F4", "央视 五加 cctv5plus 直播");
     internal static readonly SourceLink BiliNews = new("F1赛事资讯", "赛事战报、赛前前瞻和围场资讯。", "哔哩哔哩", "https://space.bilibili.com/65125803", "\uE7C3", "B站 bilibili F1赛事咨询 UP主");
+    internal static readonly SourceLink BiliVideos = new(BiliNews.Title, BiliNews.Description, BiliNews.Provider,
+        BiliNews.Address + "/video", "\uE714");
     internal static readonly SourceLink Masha = new("马莎拉车", "胡闹 P 房的赛事解说和车迷内容。", "哔哩哔哩", "https://space.bilibili.com/1313650809", "\uE8BD", "B站 bilibili 玛莎拉车 马沙拉车 UP主");
     internal static readonly SourceLink MashaLive = new("马莎拉车 · 数据直播间", "查看 B 站直播间的开播状态和赛事数据解说。", "哔哩哔哩", "https://live.bilibili.com/23954427", "\uEC15", "B站 bilibili 胡闹P房");
 

@@ -169,6 +169,8 @@ public sealed partial class MainWindow : Window
 
         NewsHeading.Text = UiLanguage.Translate("F1 官网新闻");
         ReadMoreButton.Content = UiLanguage.Choose("阅读更多", "Read more");
+        VideosHeading.Text = UiLanguage.Translate("F1赛事资讯 · 最新视频");
+        WatchMoreButton.Content = UiLanguage.Choose("观看更多", "Watch more");
         RefreshOnlineButton.Content = UiLanguage.Choose("刷新", "Refresh");
         DriverStandingsItem.Text = UiLanguage.Choose("车手积分榜", "Drivers");
         TeamStandingsItem.Text = UiLanguage.Choose("车队积分榜", "Teams");
@@ -215,8 +217,9 @@ public sealed partial class MainWindow : Window
         switch (section)
         {
             case "news":
-                ShowHub("新闻", "浏览 Formula 1 官网新闻和 F1赛事资讯的近期视频。", NewsGroups());
+                ShowHub("新闻", "浏览 Formula 1 官网新闻和 F1赛事资讯的近期视频。", []);
                 NewsCards.ItemsSource = _news;
+                VideoCards.ItemsSource = _videos;
                 NewsPanel.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 _ = RefreshOnlineAsync();
@@ -260,12 +263,9 @@ public sealed partial class MainWindow : Window
             Hub.ChangeView(null, 0, null, disableAnimation: true);
     }
 
-    private LinkGroup[] NewsGroups() =>
-    [
-        new("F1赛事资讯 · 最新视频", [.. _videos, Catalog.BiliNews])
-    ];
-
     private async void ReadMore_Click(object sender, RoutedEventArgs e) => await OpenSourceAsync(Catalog.News);
+
+    private async void WatchMore_Click(object sender, RoutedEventArgs e) => await OpenSourceAsync(Catalog.BiliVideos);
 
     private SourceLink SelectedStanding =>
         ReferenceEquals(StandingsTabs.SelectedItem, DriverStandingsItem) ? Catalog.Standings : Catalog.TeamStandings;
@@ -298,11 +298,8 @@ public sealed partial class MainWindow : Window
             await Task.WhenAll(
                 UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => NewsCards.ItemsSource = _news = links,
                     F1FeedError, UiLanguage.Translate("F1 官网新闻"), request),
-                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links =>
-                {
-                    _videos = links;
-                    Groups.ItemsSource = NewsGroups();
-                }, BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
+                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => VideoCards.ItemsSource = _videos = links,
+                    BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
         }
         else
         {

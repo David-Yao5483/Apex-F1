@@ -118,17 +118,28 @@ internal static class OnlineCatalog
                         ? DateTimeOffset.FromUnixTimeSeconds(published).ToLocalTime().ToString("yyyy-MM-dd")
                         : "在应用内观看";
                     videos.Add((published, new SourceLink(title, description, "F1赛事资讯",
-                        $"https://www.bilibili.com/video/{id}/", "\uE714")));
+                        $"https://www.bilibili.com/video/{id}/", "\uE714", ImageUri: ReadVideoCover(archive))));
                 }
             }
         }
 
         var latest = videos.OrderByDescending(video => video.Published)
             .DistinctBy(video => video.Link.Address)
-            .Take(12)
+            .Take(6)
             .Select(video => video.Link)
             .ToArray();
         return latest.Length > 0 ? latest : throw new FormatException("Bilibili did not return videos.");
+    }
+
+    private static Uri? ReadVideoCover(JsonElement archive)
+    {
+        if (!archive.TryGetProperty("pic", out var picture) || picture.ValueKind != JsonValueKind.String ||
+            !Uri.TryCreate(picture.GetString(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !uri.Host.EndsWith(".hdslb.com", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return new UriBuilder(uri) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
     }
 
     internal static IReadOnlyDictionary<string, (string Name, Uri? Image)> ParseTeamPrincipals(string html)
