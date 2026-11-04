@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Numerics;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
@@ -12,7 +14,7 @@ namespace ApexF1;
 public sealed class NativeResultsTable : UserControl
 {
     private sealed record Cell(string Text, TableBadge? Badge = null, string? Principal = null,
-        Uri? PrincipalImage = null, double BadgeInset = 0);
+        Uri? PrincipalImage = null, double BadgeInset = 0, bool IsDriverPortrait = false);
 
     private static readonly string[] DriverHeaders = ["POS.", "DRIVER", "NATIONALITY", "TEAM", "PTS."];
     private static readonly double[] DriverWidths = [12.25, 33.38, 20.34, 26.03, 8];
@@ -21,6 +23,19 @@ public sealed class NativeResultsTable : UserControl
     private static readonly string[] RaceHeaders = ["POS.", "NO.", "DRIVER", "TEAM", "LAPS", "TIME / RETIRED", "PTS."];
     private static readonly double[] RaceWidths = [9.72, 8.99, 26.4, 22.82, 9.97, 16.1, 6];
     private static readonly FontFamily TableFont = new("ms-appx:///Assets/TitilliumWeb-SemiBold.ttf#Titillium Web SemiBold");
+
+    // Face centers measured in the official 64px-wide 2026 portrait images.
+    private static readonly Dictionary<string, (double X, double Y)> DriverFaceCenters = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["alealb01"] = (31, 20), ["andant01"] = (29, 18), ["arvlin01"] = (31, 20),
+        ["carsai01"] = (32, 19), ["chalec01"] = (32, 19), ["estoco01"] = (32, 19),
+        ["feralo01"] = (29, 17), ["fracol01"] = (31, 21), ["gabbor01"] = (31, 20),
+        ["georus01"] = (29, 18), ["isahad01"] = (32, 20), ["lannor01"] = (32, 18),
+        ["lanstr01"] = (31, 19), ["lewham01"] = (31, 17), ["lialaw01"] = (32, 18),
+        ["maxver01"] = (29, 17), ["nichul01"] = (31, 19), ["olibea01"] = (32, 20),
+        ["oscpia01"] = (33, 19), ["piegas01"] = (26, 19), ["ryohir01"] = (26, 23),
+        ["serper01"] = (30, 19), ["valbot01"] = (32, 18), ["yuktsu01"] = (33, 17)
+    };
 
     private readonly StackPanel _table = new();
     private readonly ScrollViewer _scroller;
@@ -51,7 +66,7 @@ public sealed class NativeResultsTable : UserControl
         "Driver standings", DriverHeaders, DriverWidths, 720,
         rows.Select(row => new Cell[]
         {
-            new(row.Position), new(row.Name, row.DriverBadge), new(row.Nationality),
+            new(row.Position), new(row.Name, row.DriverBadge, IsDriverPortrait: true), new(row.Nationality),
             new(row.Team, row.TeamBadge, BadgeInset: 2), new(row.Points)
         }));
 
@@ -66,7 +81,8 @@ public sealed class NativeResultsTable : UserControl
         "Race classification", RaceHeaders, RaceWidths, 940,
         rows.Select(row => new Cell[]
         {
-            new(row.Position), new(row.Number), new(row.Driver, row.DriverBadge), new(row.Team, row.TeamBadge, BadgeInset: 2),
+            new(row.Position), new(row.Number), new(row.Driver, row.DriverBadge, IsDriverPortrait: true),
+            new(row.Team, row.TeamBadge, BadgeInset: 2),
             new(row.Laps), new(row.Time), new(row.Points)
         }));
 
@@ -109,7 +125,7 @@ public sealed class NativeResultsTable : UserControl
                 var badgeColumn = new Grid { ColumnSpacing = 10, VerticalAlignment = VerticalAlignment.Center };
                 badgeColumn.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
                 badgeColumn.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                var icon = CreateBadge(badge, cell.BadgeInset);
+                var icon = CreateBadge(badge, cell.BadgeInset, cell.IsDriverPortrait);
                 if (!string.IsNullOrWhiteSpace(cell.Principal))
                     AddPrincipalTooltip(icon, cell.Principal, cell.PrincipalImage);
                 badgeColumn.Children.Add(icon);
@@ -132,7 +148,7 @@ public sealed class NativeResultsTable : UserControl
         };
     }
 
-    private static Grid CreateBadge(TableBadge badge, double inset)
+    private static Grid CreateBadge(TableBadge badge, double inset, bool isDriverPortrait)
     {
         var container = new Grid { Width = 20, Height = 20 };
         container.Children.Add(new Ellipse
@@ -141,12 +157,48 @@ public sealed class NativeResultsTable : UserControl
         });
         if (badge.ImageUri is { } uri)
         {
-            var image = new ImageBrush { Stretch = Stretch.UniformToFill };
-            CachedImage.SetRemoteUri(image, uri);
-            container.Children.Add(new Ellipse { Fill = image, Margin = new Thickness(inset) });
+            if (isDriverPortrait)
+            {
+                container.Children.Add(CreateDriverPortrait(uri));
+            }
+            else
+            {
+                var image = new ImageBrush { Stretch = Stretch.UniformToFill };
+                CachedImage.SetRemoteUri(image, uri);
+                container.Children.Add(new Ellipse { Fill = image, Margin = new Thickness(inset) });
+            }
         }
         AutomationProperties.SetAccessibilityView(container, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         return container;
+    }
+
+    private static Canvas CreateDriverPortrait(Uri uri)
+    {
+        const int diameter = 20;
+        var canvas = new Canvas { Width = diameter, Height = diameter };
+        var visual = ElementCompositionPreview.GetElementVisual(canvas);
+        var circle = visual.Compositor.CreateEllipseGeometry();
+        circle.Center = circle.Radius = new Vector2(diameter / 2f);
+        visual.Clip = visual.Compositor.CreateGeometricClip(circle);
+
+        var segments = uri.Segments;
+        var driverId = segments.Length >= 2 ? segments[^2].TrimEnd('/') : "";
+        var center = uri.AbsolutePath.Contains("/common/f1/2026/", StringComparison.OrdinalIgnoreCase) &&
+            DriverFaceCenters.TryGetValue(driverId, out var calibrated) ? calibrated : (X: 32d, Y: 19d);
+        var image = new Image { Width = diameter, Height = diameter, Stretch = Stretch.UniformToFill };
+        if (uri.AbsolutePath.EndsWith("right.webp", StringComparison.OrdinalIgnoreCase))
+        {
+            const double scale = diameter / 48d;
+            // The side portraits have a fixed width. Let WinUI preserve their varying heights.
+            image.Stretch = Stretch.Uniform;
+            image.Width = 64 * scale;
+            image.Height = double.NaN;
+            Canvas.SetLeft(image, diameter / 2d - center.X * scale);
+            Canvas.SetTop(image, diameter / 2d - center.Y * scale);
+        }
+        canvas.Children.Add(image);
+        CachedImage.SetRemoteUri(image, uri);
+        return canvas;
     }
 
     private static Color ParseBadgeColor(string? hex)

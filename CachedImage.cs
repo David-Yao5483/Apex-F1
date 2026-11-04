@@ -24,7 +24,7 @@ public static class CachedImage
         if (args.NewValue is not Uri uri)
             return;
 
-        var decodeWidth = sender is ImageBrush ? 96 : 640;
+        var decodeWidth = sender is ImageBrush or Image { Width: <= 32 } ? 96 : 640;
         var path = await ImageCache.GetFileAsync(uri);
         if (GetRemoteUri(sender) != uri)
             return;
