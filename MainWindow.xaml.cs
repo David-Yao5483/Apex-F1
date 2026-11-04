@@ -1,4 +1,5 @@
 using Microsoft.UI.Windowing;
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -14,6 +15,7 @@ public sealed partial class MainWindow : Window
     private static readonly string DataFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApexF1");
     private static readonly string ThemeFile = Path.Combine(DataFolder, "theme.txt");
+    private static readonly string LanguageFile = Path.Combine(DataFolder, "language.txt");
 
     private int _featureIndex;
     private WebView2? _webView;
@@ -22,6 +24,8 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _onlineRequest;
     private IReadOnlyList<SourceLink> _news = [];
     private IReadOnlyList<SourceLink> _videos = [];
+    private string _searchQuery = "";
+    private bool _changingLanguage;
 
     public MainWindow()
     {
@@ -31,6 +35,11 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "ApexF1.ico"));
         Root.Loaded += SetInitialWindowBounds;
         RestoreTheme();
+        var savedLanguage = ReadPreference(LanguageFile);
+        UiLanguage.English = UiLanguage.UseEnglish(savedLanguage, CultureInfo.CurrentUICulture);
+        if (savedLanguage is not ("en" or "zh-CN"))
+            SavePreference(LanguageFile, UiLanguage.Choose("zh-CN", "en"));
+        ApplyLanguage();
         Root.ActualThemeChanged += (_, _) => UpdateTheme();
         UpdateTheme();
         RenderFeature();
@@ -75,14 +84,32 @@ public sealed partial class MainWindow : Window
 
     private void RestoreTheme()
     {
+        Root.RequestedTheme = ReadPreference(ThemeFile) switch
+        {
+            "Dark" => ElementTheme.Dark,
+            "Light" => ElementTheme.Light,
+            _ => ElementTheme.Default
+        };
+    }
+
+    private static string? ReadPreference(string path)
+    {
         try
         {
-            Root.RequestedTheme = File.ReadAllText(ThemeFile) switch
-            {
-                "Dark" => ElementTheme.Dark,
-                "Light" => ElementTheme.Light,
-                _ => ElementTheme.Default
-            };
+            return File.ReadAllText(path).Trim();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static void SavePreference(string path, string value)
+    {
+        try
+        {
+            Directory.CreateDirectory(DataFolder);
+            File.WriteAllText(path, value);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -92,23 +119,87 @@ public sealed partial class MainWindow : Window
     private void ThemeButton_Click(object sender, RoutedEventArgs e)
     {
         Root.RequestedTheme = Root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+        SavePreference(ThemeFile, Root.RequestedTheme.ToString());
+    }
+
+    private void LanguageButton_Click(object sender, RoutedEventArgs e)
+    {
+        UiLanguage.English = !UiLanguage.English;
+        SavePreference(LanguageFile, UiLanguage.Choose("zh-CN", "en"));
+        ApplyLanguage();
+        RenderFeature();
+        UpdateTheme();
+        SearchBox.ItemsSource = null;
+        _changingLanguage = true;
         try
         {
-            Directory.CreateDirectory(DataFolder);
-            File.WriteAllText(ThemeFile, Root.RequestedTheme.ToString());
+            if (MainTabs.SelectedItem?.Tag is string section)
+                ShowSection(section);
+            else
+                ShowSearchResults(_searchQuery);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        finally
         {
+            _changingLanguage = false;
         }
+    }
+
+    private void ApplyLanguage()
+    {
+        Root.Language = UiLanguage.Choose("zh-CN", "en-US");
+        LanguageButton.Content = UiLanguage.Choose("EN", "中文");
+        Describe(LanguageButton, "切换到英文", "Switch to Chinese");
+        var search = UiLanguage.Choose("搜索栏目、频道或创作者", "Search sections, channels or creators");
+        SearchBox.PlaceholderText = search;
+        AutomationProperties.SetName(SearchBox, search);
+        AutomationProperties.SetName(MainTabs, UiLanguage.Choose("主导航", "Main navigation"));
+        AutomationProperties.SetName(StandingsTabs, UiLanguage.Choose("积分榜类别", "Standings categories"));
+        foreach (var item in MainTabs.Items)
+        {
+            item.Text = UiLanguage.Translate(item.Tag switch
+            {
+                "news" => "新闻",
+                "standings" => "积分榜",
+                "results" => "赛果",
+                "calendar" => "赛历",
+                "watch" => "观赛",
+                _ => "首页"
+            });
+        }
+
+        NewsHeading.Text = UiLanguage.Translate("F1 官网新闻");
+        ReadMoreButton.Content = UiLanguage.Choose("阅读更多", "Read more");
+        RefreshOnlineButton.Content = UiLanguage.Choose("刷新", "Refresh");
+        DriverStandingsItem.Text = UiLanguage.Choose("车手积分榜", "Drivers");
+        TeamStandingsItem.Text = UiLanguage.Choose("车队积分榜", "Teams");
+        RankHeader.Text = UiLanguage.Choose("名次", "Rank");
+        NameHeader.Text = UiLanguage.Choose("车手 / 车队", "Driver / team");
+        PointsHeader.Text = UiLanguage.Choose("积分", "Points");
+        ExternalLabel.Text = UiLanguage.Choose("在浏览器打开", "Open in browser");
+        Describe(ExternalButton, "在浏览器打开", "Open in browser");
+        Describe(CloseReaderButton, "返回目录", "Back to catalogue");
+        Describe(BackButton, "网页后退", "Go back");
+        Describe(ForwardButton, "网页前进", "Go forward");
+        Describe(RefreshReaderButton, "刷新网页", "Reload page");
+        Describe(PreviousFeatureButton, "上一张焦点卡片", "Previous feature");
+        Describe(NextFeatureButton, "下一张焦点卡片", "Next feature");
+        if (_readerLink is { } link)
+            ReaderTitle.Text = link.DisplayTitle;
+    }
+
+    private static void Describe(Button button, string chinese, string english)
+    {
+        var description = UiLanguage.Choose(chinese, english);
+        AutomationProperties.SetName(button, description);
+        ToolTipService.SetToolTip(button, description);
     }
 
     private void UpdateTheme()
     {
         var dark = Root.ActualTheme == ElementTheme.Dark;
-        var label = dark ? "切换到浅色模式" : "切换到深色模式";
         ThemeIcon.Glyph = dark ? "\uE706" : "\uE708";
-        ToolTipService.SetToolTip(ThemeButton, label);
-        AutomationProperties.SetName(ThemeButton, label);
+        Describe(ThemeButton, dark ? "切换到浅色模式" : "切换到深色模式",
+            dark ? "Switch to light mode" : "Switch to dark mode");
         if (_webView?.CoreWebView2 is { } core)
             core.Profile.PreferredColorScheme = dark ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
     }
@@ -125,6 +216,8 @@ public sealed partial class MainWindow : Window
         {
             case "news":
                 ShowHub("新闻", "浏览 Formula 1 官网新闻和 F1赛事资讯的近期视频。", NewsGroups());
+                NewsCards.ItemsSource = _news;
+                NewsPanel.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 _ = RefreshOnlineAsync();
                 break;
@@ -154,21 +247,25 @@ public sealed partial class MainWindow : Window
         _onlineRequest?.Cancel();
         _onlineRequest = null;
         OnlineControls.Visibility = Visibility.Collapsed;
+        NewsPanel.Visibility = Visibility.Collapsed;
         StandingsPanel.Visibility = Visibility.Collapsed;
-        CloseReader();
-        PageTitle.Text = title;
-        PageDescription.Text = description;
+        if (!_changingLanguage)
+            CloseReader();
+        PageTitle.Text = UiLanguage.Translate(title);
+        PageDescription.Text = UiLanguage.Translate(description);
         PageHeading.Visibility = isHome ? Visibility.Collapsed : Visibility.Visible;
         Hero.Visibility = isHome ? Visibility.Visible : Visibility.Collapsed;
-        Groups.ItemsSource = groups;
-        Hub.ChangeView(null, 0, null, disableAnimation: true);
+        Groups.ItemsSource = groups.ToArray();
+        if (!_changingLanguage)
+            Hub.ChangeView(null, 0, null, disableAnimation: true);
     }
 
     private LinkGroup[] NewsGroups() =>
     [
-        new("F1 官网新闻", [.. _news, Catalog.News]),
         new("F1赛事资讯 · 最新视频", [.. _videos, Catalog.BiliNews])
     ];
+
+    private async void ReadMore_Click(object sender, RoutedEventArgs e) => await OpenSourceAsync(Catalog.News);
 
     private SourceLink SelectedStanding =>
         ReferenceEquals(StandingsTabs.SelectedItem, DriverStandingsItem) ? Catalog.Standings : Catalog.TeamStandings;
@@ -199,15 +296,20 @@ public sealed partial class MainWindow : Window
         if (MainTabs.SelectedItem?.Tag as string == "news")
         {
             await Task.WhenAll(
-                UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => _news = links, F1FeedError, "F1 新闻", request),
-                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => _videos = links, BiliFeedError, "B 站视频", request));
+                UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => NewsCards.ItemsSource = _news = links,
+                    F1FeedError, UiLanguage.Translate("F1 官网新闻"), request),
+                UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links =>
+                {
+                    _videos = links;
+                    Groups.ItemsSource = NewsGroups();
+                }, BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
         }
         else
         {
             var source = SelectedStanding;
             await UpdateFeedAsync(
                 () => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token),
-                rows => StandingRows.ItemsSource = rows, F1FeedError, source.Title, request);
+                rows => StandingRows.ItemsSource = rows, F1FeedError, source.DisplayTitle, request);
         }
 
         if (_onlineRequest == request)
@@ -227,8 +329,6 @@ public sealed partial class MainWindow : Window
                 return;
 
             show(result);
-            if (MainTabs.SelectedItem?.Tag as string == "news")
-                Groups.ItemsSource = NewsGroups();
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or FormatException or
             System.Text.Json.JsonException or System.Text.RegularExpressions.RegexMatchTimeoutException or OperationCanceledException)
@@ -236,8 +336,8 @@ public sealed partial class MainWindow : Window
             if (_onlineRequest != request || request.IsCancellationRequested)
                 return;
 
-            error.Title = $"{label}暂时无法更新";
-            error.Message = "可以重试刷新，或打开下方的来源页面。";
+            error.Title = UiLanguage.Choose($"{label}暂时无法更新", $"Could not refresh {label}");
+            error.Message = UiLanguage.Choose("可以重试刷新，或打开下方的来源页面。", "Try again or open the source page below.");
             error.IsOpen = true;
         }
     }
@@ -245,10 +345,10 @@ public sealed partial class MainWindow : Window
     private void RenderFeature()
     {
         var feature = Catalog.Features[_featureIndex];
-        HeroLabel.Text = feature.Label;
-        HeroTitle.Text = feature.Title;
-        HeroDescription.Text = feature.Description;
-        HeroAction.Content = feature.Action;
+        HeroLabel.Text = UiLanguage.Translate(feature.Label);
+        HeroTitle.Text = UiLanguage.Translate(feature.Title);
+        HeroDescription.Text = UiLanguage.Translate(feature.Description);
+        HeroAction.Content = UiLanguage.Translate(feature.Action);
         HeroArt.Source = new SvgImageSource(new Uri($"ms-appx:///Assets/{feature.Art}.svg"));
         FeatureIndex.Text = $"{_featureIndex + 1} / {Catalog.Features.Length}";
     }
@@ -297,9 +397,18 @@ public sealed partial class MainWindow : Window
         if (query.Length == 0)
             return;
 
-        var matches = Catalog.Search(query).ToArray();
+        _searchQuery = query;
         MainTabs.SelectedItem = null;
-        ShowHub("搜索结果", matches.Length == 0 ? $"找不到与“{query}”相关的入口。" : $"“{query}” · {matches.Length} 个入口",
+        ShowSearchResults(query);
+    }
+
+    private void ShowSearchResults(string query)
+    {
+        var matches = Catalog.Search(query).ToArray();
+        var description = matches.Length == 0
+            ? UiLanguage.Choose($"找不到与“{query}”相关的入口。", $"No links match “{query}”.")
+            : UiLanguage.Choose($"“{query}” · {matches.Length} 个入口", $"“{query}” · {matches.Length} links");
+        ShowHub("搜索结果", description,
             matches.Length == 0 ? [] : [new("相关入口", matches)]);
     }
 
@@ -314,7 +423,7 @@ public sealed partial class MainWindow : Window
         _readerOrigin = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
         ReleaseWebView();
         _readerLink = link;
-        ReaderTitle.Text = link.Title;
+        ReaderTitle.Text = link.DisplayTitle;
         ReaderAddress.Text = link.Uri.Host;
         ReaderError.IsOpen = false;
         ReaderProgress.Visibility = Visibility.Visible;
@@ -347,7 +456,8 @@ public sealed partial class MainWindow : Window
             {
                 if (_webView == view && args.ProcessFailedKind is
                     CoreWebView2ProcessFailedKind.BrowserProcessExited or CoreWebView2ProcessFailedKind.RenderProcessExited)
-                    ShowReaderError("网页进程已退出", "请刷新重试，或在浏览器打开。");
+                    ShowReaderError(UiLanguage.Choose("网页进程已退出", "The web process closed"),
+                        UiLanguage.Choose("请刷新重试，或在浏览器打开。", "Reload or open the page in your browser."));
             };
             core.NewWindowRequested += (_, args) =>
             {
@@ -377,14 +487,17 @@ public sealed partial class MainWindow : Window
                 ReaderProgress.Visibility = Visibility.Collapsed;
                 UpdateHistory();
                 if (!args.IsSuccess && args.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
-                    ShowReaderError("无法加载网页", "请检查网络后刷新，或在浏览器打开。");
+                    ShowReaderError(UiLanguage.Choose("无法加载网页", "Could not load the page"),
+                        UiLanguage.Choose("请检查网络后刷新，或在浏览器打开。", "Check your connection, then reload or open in your browser."));
             };
             view.Source = link.Uri;
         }
         catch (Exception)
         {
             if (_webView == view)
-                ShowReaderError("无法启动内置网页", "可在浏览器打开，或安装 Microsoft Edge WebView2 Runtime 后刷新。");
+                ShowReaderError(UiLanguage.Choose("无法启动内置网页", "Could not open the in-app browser"),
+                    UiLanguage.Choose("可在浏览器打开，或安装 Microsoft Edge WebView2 Runtime 后刷新。",
+                        "Open in your browser, or install the Microsoft Edge WebView2 Runtime and reload."));
         }
     }
 
@@ -440,7 +553,8 @@ public sealed partial class MainWindow : Window
         }
 
         if (_readerLink == currentLink)
-            ShowReaderError("无法打开浏览器", "请检查 Windows 的默认浏览器设置。");
+            ShowReaderError(UiLanguage.Choose("无法打开浏览器", "Could not open the browser"),
+                UiLanguage.Choose("请检查 Windows 的默认浏览器设置。", "Check your Windows default browser settings."));
     }
 
     private void CloseReader_Click(object sender, RoutedEventArgs e)

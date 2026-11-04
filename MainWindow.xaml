@@ -85,7 +85,7 @@
             </DataTemplate>
             <DataTemplate x:Key="LinkGroupTemplate" x:DataType="local:LinkGroup">
                 <StackPanel Spacing="12" Margin="0,0,0,28">
-                    <TextBlock Text="{x:Bind Title}" Style="{StaticResource SubtitleTextBlockStyle}"
+                    <TextBlock Text="{x:Bind DisplayTitle}" Style="{StaticResource SubtitleTextBlockStyle}"
                                AutomationProperties.HeadingLevel="Level2" />
                     <ItemsRepeater ItemsSource="{x:Bind Links}" ItemTemplate="{StaticResource SourceCardTemplate}">
                         <ItemsRepeater.Layout>

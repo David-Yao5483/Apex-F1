@@ -17,7 +17,10 @@ public sealed record SourceLink(
     public override string ToString() => DisplayTitle;
 }
 
-public sealed record LinkGroup(string Title, IReadOnlyList<SourceLink> Links);
+public sealed record LinkGroup(string Title, IReadOnlyList<SourceLink> Links)
+{
+    public string DisplayTitle => UiLanguage.Translate(Title);
+}
 
 internal sealed record Feature(
     string Label,

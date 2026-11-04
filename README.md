@@ -1,10 +1,10 @@
 # Apex F1
 
-Apex F1 是一个简体中文的 Windows 桌面观赛与赛事信息应用，使用 C#、WinUI 3 XAML 和 Windows App SDK。窗口顶部居中排列首页、新闻、积分榜、赛果、赛历和观赛六个标签。字体使用 Windows 的 Segoe UI Variable 与系统中文字体回退。标题栏左侧的主题按钮可切换深浅色，应用会记住选择。
+Apex F1 是一个 Windows 桌面观赛与赛事信息应用，使用 C#、WinUI 3 XAML 和 Windows App SDK。窗口顶部居中排列首页、新闻、积分榜、赛果、赛历和观赛六个标签。首次启动时，中文系统使用简体中文，其余系统语言使用英文。标题栏左侧可切换中英文和深浅主题，应用会记住选择。
 
 ## 构建与运行
 
-本机生成的 x64 发布目录为 `bin\publish\win-x64-tabs`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
+本机生成的 x64 发布目录为 `bin\publish\win-x64-news`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
 
 在 Windows 上安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。使用支持 Windows App SDK 的 Visual Studio 打开项目，或在项目目录运行以下命令。
 
@@ -23,8 +23,8 @@ ARM64 使用 `-p:Platform=ARM64 -r win-arm64`。应用采用免安装目录分�
 
 ## 内容与观赛
 
-- **新闻**从 F1 官网和「F1赛事资讯」的 B 站公开合集读取近期内容。新闻和视频标题直接显示在原生卡片上，点击后在应用内打开原文或播放页。[F1 官网新闻](https://www.formula1.com/en/latest) · [F1赛事资讯](https://space.bilibili.com/65125803)
-- **积分榜**直接显示车手和车队的名次及积分。**赛果**和**赛历**提供官方页面的应用内入口。[Formula 1 官网](https://www.formula1.com/en)
+- **新闻**按官网顺序显示最近六篇文章的封面和标题，每行三篇。左侧「阅读更多」在应用内打开 F1 官网新闻列表。下方另有「F1赛事资讯」的 B 站近期视频。[F1 官网新闻](https://www.formula1.com/en/latest) · [F1赛事资讯](https://space.bilibili.com/65125803)
+- **积分榜**显示车手与车队的名次及积分，并使用 F1 官网的车手肖像和 2026 赛季领队专题照片。**赛果**和**赛历**提供官方页面的应用内入口。[车手积分榜](https://www.formula1.com/en/results/2026/drivers) · [2026 车队领队](https://www.formula1.com/en/latest/article/who-are-the-2026-team-principals.2Jrw5LEJbEoX2gM5OtFL8K)
 - **观赛**提供央视赛车专区、体育节目单、CCTV-5 和 CCTV-5+ 官方直播页及央视中国大奖赛转播专题。央视转播场次以节目单和赛事预告为准。[央视赛车专区](https://sports.cctv.com/racing/) · [体育节目单](https://sports.cctv.com/epg/?channel=cctv5+)
 - **创作者**可直达两个 UP 主的空间和马莎拉车的数据直播间。[F1赛事资讯](https://space.bilibili.com/65125803) · [马莎拉车](https://space.bilibili.com/1313650809) · [数据直播间](https://live.bilibili.com/23954427)
 
