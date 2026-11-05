@@ -91,7 +91,7 @@ public sealed class NativeResultsTable : UserControl
         var culture = CultureInfo.GetCultureInfo(UiLanguage.Choose("zh-CN", "en-US"));
         var dateFormat = UiLanguage.Choose("M月d日 ddd", "ddd, MMM d");
         Draw(UiLanguage.Choose("分站赛程", "Race weekend schedule"),
-            [UiLanguage.Choose("日期", "DATE"), UiLanguage.Choose("比赛环节", "SESSION"), UiLanguage.Choose("系统本地时间", "LOCAL TIME")],
+            [UiLanguage.Choose("日期", "DATE"), UiLanguage.Choose("比赛环节", "SESSION"), UiLanguage.Choose("本地时间", "LOCAL TIME")],
             [27, 31, 42], 360, sessions.Select(session =>
             {
                 var start = session.Start.ToLocalTime();

@@ -234,7 +234,6 @@ public sealed partial class MainWindow : Window
         ExternalLabel.Text = UiLanguage.Choose("在浏览器打开", "Open in browser");
         Describe(ExternalButton, "在浏览器打开", "Open in browser");
         UpdateBackNavigation();
-        Describe(ForwardButton, "网页前进", "Go forward");
         if (_readerLink is { } link)
             ReaderTitle.Text = link.DisplayTitle;
     }
@@ -529,7 +528,7 @@ public sealed partial class MainWindow : Window
         var view = new WebView2();
         _webView = view;
         WebHost.Child = view;
-        UpdateHistory();
+        UpdateBackNavigation();
         try
         {
             var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(DataFolder, "WebView2"), null);
@@ -546,7 +545,7 @@ public sealed partial class MainWindow : Window
             core.HistoryChanged += (_, _) =>
             {
                 if (_webView == view)
-                    UpdateHistory();
+                    UpdateBackNavigation();
             };
             core.ProcessFailed += (_, args) =>
             {
@@ -581,7 +580,7 @@ public sealed partial class MainWindow : Window
                     return;
 
                 ReaderProgress.Visibility = Visibility.Collapsed;
-                UpdateHistory();
+                UpdateBackNavigation();
                 if (!args.IsSuccess && args.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
                     ShowReaderError(UiLanguage.Choose("无法加载网页", "Could not load the page"),
                         UiLanguage.Choose("请检查网络后刷新，或在浏览器打开。", "Check your connection, then reload or open in your browser."));
@@ -603,12 +602,6 @@ public sealed partial class MainWindow : Window
         ReaderError.Title = title;
         ReaderError.Message = message;
         ReaderError.IsOpen = true;
-    }
-
-    private void UpdateHistory()
-    {
-        ForwardButton.IsEnabled = _webView?.CanGoForward == true;
-        UpdateBackNavigation();
     }
 
     // Detail views share this one title-bar action. History updates can change its destination without restarting the animation.
@@ -675,12 +668,6 @@ public sealed partial class MainWindow : Window
         Storyboard.SetTarget(animation, target);
         Storyboard.SetTargetProperty(animation, property);
         transition.Children.Add(animation);
-    }
-
-    private void Forward_Click(object sender, RoutedEventArgs e)
-    {
-        if (_webView?.CanGoForward == true)
-            _webView.GoForward();
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
