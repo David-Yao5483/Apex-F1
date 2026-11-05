@@ -7,7 +7,8 @@ public sealed record SourceLink(
     string Address,
     string Glyph,
     string Keywords = "",
-    Uri? ImageUri = null)
+    Uri? ImageUri = null,
+    string? FlagSvg = null)
 {
     public Uri Uri { get; } = new(Address);
     public string DisplayTitle => UiLanguage.Translate(Title);

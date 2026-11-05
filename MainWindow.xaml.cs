@@ -31,6 +31,7 @@ public sealed partial class MainWindow : Window
     private IReadOnlyList<SourceLink> _news = [];
     private IReadOnlyList<SourceLink> _videos = [];
     private IReadOnlyList<SourceLink> _raceOverview = [];
+    private IReadOnlyList<SourceLink> _calendarOverview = [];
     private SourceLink? _raceDetail;
     private string _searchQuery = "";
     private bool _changingLanguage;
@@ -292,8 +293,15 @@ public sealed partial class MainWindow : Window
                 RaceRows.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
+            case "calendar" when _raceDetail is { } race:
+                ShowHub(race.Title, race.Description, [new("官方赛历", [race])]);
+                ResultsTablePanel.Visibility = Visibility.Visible;
+                ResultsTable.ShowSchedule([]);
+                OnlineControls.Visibility = Visibility.Visible;
+                break;
             case "calendar":
                 ShowHub("赛历", "查看各站大奖赛、赛道和分节时间。", [new("官方赛历", [Catalog.Calendar])]);
+                RaceRows.ItemsSource = _calendarOverview;
                 RaceRows.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
@@ -320,6 +328,7 @@ public sealed partial class MainWindow : Window
         if (!_changingLanguage)
             CloseReader();
         PageTitle.Text = UiLanguage.Translate(title);
+        RaceFlag.SetSvg(PageRaceFlag, _raceDetail?.FlagSvg);
         PageDescription.Text = UiLanguage.Translate(description);
         Groups.ItemsSource = groups.ToArray();
         UpdateRefreshButton();
@@ -387,9 +396,13 @@ public sealed partial class MainWindow : Window
                 await UpdateFeedAsync(() => OnlineCatalog.GetRaceResultsAsync(request.Token),
                     rows => RaceRows.ItemsSource = _raceOverview = rows, F1FeedError, Catalog.Results.DisplayTitle, request);
                 break;
+            case "calendar" when _raceDetail is { } schedule:
+                await UpdateFeedAsync(() => OnlineCatalog.GetRaceSessionsAsync(schedule, request.Token),
+                    ResultsTable.ShowSchedule, F1FeedError, schedule.DisplayTitle, request);
+                break;
             case "calendar":
                 await UpdateFeedAsync(() => OnlineCatalog.GetRaceCalendarAsync(request.Token),
-                    rows => RaceRows.ItemsSource = rows, F1FeedError, Catalog.Calendar.DisplayTitle, request);
+                    rows => RaceRows.ItemsSource = _calendarOverview = rows, F1FeedError, Catalog.Calendar.DisplayTitle, request);
                 break;
         }
 
@@ -468,19 +481,13 @@ public sealed partial class MainWindow : Window
             await OpenSourceAsync(link);
     }
 
-    private async void RaceRow_Click(object sender, RoutedEventArgs e)
+    private void RaceRow_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: SourceLink race })
+        if (sender is not Button { Tag: SourceLink race } || MainTabs.SelectedItem?.Tag is not string section)
             return;
-
-        if (MainTabs.SelectedItem?.Tag as string != "results")
-        {
-            await OpenSourceAsync(race);
-            return;
-        }
 
         _raceDetail = race;
-        ShowSection("results");
+        ShowSection(section);
         TitleBackButton.Focus(FocusState.Programmatic);
     }
 
@@ -497,10 +504,10 @@ public sealed partial class MainWindow : Window
             UpdateBackNavigation();
             origin?.Focus(FocusState.Programmatic);
         }
-        else if (_raceDetail is not null)
+        else if (_raceDetail is not null && MainTabs.SelectedItem?.Tag is string section)
         {
             _raceDetail = null;
-            ShowSection("results");
+            ShowSection(section);
             MainTabs.SelectedItem?.Focus(FocusState.Programmatic);
         }
     }
@@ -612,6 +619,8 @@ public sealed partial class MainWindow : Window
             Describe(TitleBackButton, "网页后退", "Go back one web page");
         else if (_readerLink is not null)
             Describe(TitleBackButton, "返回上一页", "Back to the previous app page");
+        else if (MainTabs.SelectedItem?.Tag as string == "calendar")
+            Describe(TitleBackButton, "返回赛历", "Back to calendar");
         else
             Describe(TitleBackButton, "返回分站赛果", "Back to race results");
 

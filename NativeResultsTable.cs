@@ -86,6 +86,27 @@ public sealed class NativeResultsTable : UserControl
             new(row.Laps), new(row.Time), new(row.Points)
         }));
 
+    internal void ShowSchedule(IReadOnlyList<RaceSession> sessions)
+    {
+        var culture = CultureInfo.GetCultureInfo(UiLanguage.Choose("zh-CN", "en-US"));
+        var dateFormat = UiLanguage.Choose("M月d日 ddd", "ddd, MMM d");
+        Draw(UiLanguage.Choose("分站赛程", "Race weekend schedule"),
+            [UiLanguage.Choose("日期", "DATE"), UiLanguage.Choose("比赛环节", "SESSION"), UiLanguage.Choose("系统本地时间", "LOCAL TIME")],
+            [27, 31, 42], 360, sessions.Select(session =>
+            {
+                var start = session.Start.ToLocalTime();
+                var time = start.ToString("HH:mm", culture);
+                if (session.End is { } endTime)
+                {
+                    var end = endTime.ToLocalTime();
+                    var endFormat = start.Date == end.Date ? "HH:mm" : dateFormat + " HH:mm";
+                    time += " – " + end.ToString(endFormat, culture);
+                }
+
+                return new Cell[] { new(start.ToString(dateFormat, culture)), new(UiLanguage.SessionName(session.Name)), new(time) };
+            }));
+    }
+
     private void Draw(string name, string[] headers, double[] widths, double minWidth, IEnumerable<Cell[]> rows)
     {
         AutomationProperties.SetName(_scroller, name);

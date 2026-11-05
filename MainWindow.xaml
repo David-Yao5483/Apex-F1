@@ -93,8 +93,17 @@
                         <TextBlock Text="{x:Bind Provider}" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       TextWrapping="Wrap" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Image Width="24" Height="24" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Visibility="Collapsed" local:RaceFlag.Svg="{x:Bind FlagSvg}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </Grid>
                             <TextBlock Text="{x:Bind Description}" TextWrapping="Wrap"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
@@ -196,9 +205,17 @@
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="HubContent" MaxWidth="1520" Margin="28,18,28,0" Spacing="18">
                             <StackPanel Spacing="4">
-                                <TextBlock x:Name="PageTitle" Text="新闻"
-                                           Style="{StaticResource TitleTextBlockStyle}"
-                                           AutomationProperties.HeadingLevel="Level1" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Image x:Name="PageRaceFlag" Width="32" Height="32" Margin="0,0,10,0"
+                                           VerticalAlignment="Center" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock x:Name="PageTitle" Grid.Column="1" Text="新闻"
+                                               Style="{StaticResource TitleTextBlockStyle}"
+                                               AutomationProperties.HeadingLevel="Level1" />
+                                </Grid>
                                 <TextBlock x:Name="PageDescription" TextWrapping="Wrap"
                                            Style="{StaticResource BodyTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

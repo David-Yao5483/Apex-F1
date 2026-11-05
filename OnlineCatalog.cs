@@ -12,6 +12,8 @@ public sealed record StandingRow(string Position, string Name, string Team, stri
 public sealed record RaceClassificationRow(string Position, string Number, string Driver, string Team,
     string Laps, string Time, string Points, TableBadge DriverBadge, TableBadge TeamBadge);
 
+internal sealed record RaceSession(string Name, DateTimeOffset Start, DateTimeOffset? End);
+
 internal static class OnlineCatalog
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -33,6 +35,10 @@ internal static class OnlineCatalog
 
     internal static async Task<IReadOnlyList<SourceLink>> GetRaceCalendarAsync(CancellationToken cancellationToken)
         => ParseRaceCalendar(await DownloadAsync(Catalog.Calendar.Uri, null, cancellationToken));
+
+    internal static async Task<IReadOnlyList<RaceSession>> GetRaceSessionsAsync(
+        SourceLink race, CancellationToken cancellationToken)
+        => ParseRaceSessions(await DownloadAsync(race.Uri, null, cancellationToken));
 
     internal static async Task<IReadOnlyList<RaceClassificationRow>> GetRaceClassificationAsync(
         SourceLink race, CancellationToken cancellationToken)
@@ -184,7 +190,8 @@ internal static class OnlineCatalog
                     $"冠军 {winner} · {team} · {laps} 圈 · {time}",
                     $"Winner {winner} · {team} · {laps} laps · {time}");
                 races.Add(new SourceLink(title, summary, PlainText(cells[1]),
-                    new Uri(Catalog.Results.Uri, WebUtility.HtmlDecode(link.Groups["path"].Value)).AbsoluteUri, "\uE9D9"));
+                    new Uri(Catalog.Results.Uri, WebUtility.HtmlDecode(link.Groups["path"].Value)).AbsoluteUri, "\uE9D9",
+                    FlagSvg: ReadRaceFlag(cells[0])));
             }
 
             if (races.Count > 0)
@@ -244,10 +251,55 @@ internal static class OnlineCatalog
                 dateLabel = label + " · " + dateLabel;
 
             races.Add(new SourceLink(PlainText(place.Groups["text"].Value), PlainText(title.Groups["text"].Value),
-                dateLabel, new Uri(Catalog.Calendar.Uri, path).AbsoluteUri, "\uE787"));
+                dateLabel, new Uri(Catalog.Calendar.Uri, path).AbsoluteUri, "\uE787", FlagSvg: ReadRaceFlag(body)));
         }
 
         return races.Count > 0 ? races : throw new FormatException("F1 calendar events are missing.");
+    }
+
+    private static string? ReadRaceFlag(string html)
+    {
+        var svg = Matches(html, """<svg\b(?=[^>]*\bclass="[^"]*\bCountryFlag-module_flag)[^>]*>.*?</svg>""")
+            .FirstOrDefault();
+        // Direct2D supports the SVG view box and paths, but requires a size other than em.
+        return svg?.Value.Replace("width=\"1em\"", "width=\"56\"").Replace("height=\"1em\"", "height=\"56\"");
+    }
+
+    internal static IReadOnlyList<RaceSession> ParseRaceSessions(string html)
+    {
+        foreach (var script in Matches(html, """<script\b[^>]*\btype="application/ld\+json"[^>]*>(?<json>.*?)</script>"""))
+        {
+            using var document = JsonDocument.Parse(script.Groups["json"].Value);
+            var race = document.RootElement;
+            if (race.ValueKind != JsonValueKind.Object || !race.TryGetProperty("subEvent", out var events) ||
+                events.ValueKind != JsonValueKind.Array)
+                continue;
+
+            var sessions = new List<RaceSession>();
+            foreach (var session in events.EnumerateArray())
+            {
+                if (session.ValueKind != JsonValueKind.Object ||
+                    !session.TryGetProperty("name", out var nameValue) || nameValue.ValueKind != JsonValueKind.String ||
+                    !session.TryGetProperty("startDate", out var startValue) || startValue.ValueKind != JsonValueKind.String ||
+                    !startValue.TryGetDateTimeOffset(out var start))
+                    continue;
+
+                var name = nameValue.GetString()!.Split(" - ", 2, StringSplitOptions.TrimEntries)[0];
+                if (name.Length == 0)
+                    continue;
+
+                // The public schedule lists only the start time for the race.
+                DateTimeOffset? end = name != "Race" && session.TryGetProperty("endDate", out var endValue) &&
+                    endValue.ValueKind == JsonValueKind.String && endValue.TryGetDateTimeOffset(out var finish) && finish > start
+                    ? finish : null;
+                sessions.Add(new RaceSession(name, start, end));
+            }
+
+            if (sessions.Count > 0)
+                return sessions.OrderBy(session => session.Start).ToArray();
+        }
+
+        throw new FormatException("F1 session times are missing.");
     }
 
     internal static IReadOnlyDictionary<string, (string Name, Uri? Image)> ParseTeamPrincipals(string html)

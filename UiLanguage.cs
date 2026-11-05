@@ -18,6 +18,21 @@ internal static class UiLanguage
 
     internal static string Choose(string chinese, string english) => English ? english : chinese;
 
+    internal static string SessionName(string name) => English ? name : name switch
+    {
+        "Practice 1" => "第一次练习赛",
+        "Practice 2" => "第二次练习赛",
+        "Practice 3" => "第三次练习赛",
+        "Sprint Qualifying" => "冲刺排位赛",
+        "Sprint" => "冲刺赛",
+        "Qualifying" => "排位赛",
+        "Race" => "正赛",
+        "Day 1" => "测试第 1 天",
+        "Day 2" => "测试第 2 天",
+        "Day 3" => "测试第 3 天",
+        _ => name
+    };
+
     private static readonly Dictionary<string, string> EnglishText = new()
     {
         ["新闻"] = "News",

@@ -24,7 +24,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.4" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.4" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" PrivateAssets="all" />
-    <Content Include="Assets\Mark.svg;Assets\ApexF1.ico;Assets\TitilliumWeb-SemiBold.ttf;Assets\TitilliumWeb-OFL.txt"
+    <Content Include="Assets\Mark.svg;Assets\ChinaFlag.svg;Assets\ApexF1.ico;Assets\TitilliumWeb-SemiBold.ttf;Assets\TitilliumWeb-OFL.txt"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

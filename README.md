@@ -6,7 +6,7 @@ Apex F1 是一个 Windows 桌面观赛与赛事信息应用，使用 C#、WinUI 
 
 ## 构建与运行
 
-本机生成的 x64 发布目录为 `bin\publish\win-x64-navigation`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
+本机生成的 x64 发布目录为 `bin\publish\win-x64-current`。打开其中的 `ApexF1.exe` 即可运行。该版本使用系统中的 .NET 10 运行时和 WebView2 Runtime。
 
 在 Windows 上安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。使用支持 Windows App SDK 的 Visual Studio 打开项目，或在项目目录运行以下命令。
 
@@ -27,7 +27,7 @@ ARM64 使用 `-p:Platform=ARM64 -r win-arm64`。应用采用免安装目录分�
 
 - **新闻**显示最近六篇 F1 官网文章和最近六条「F1赛事资讯」公开合集视频。两个区域均显示封面和标题，每行三张卡片。点击卡片在应用内打开原文或视频，区域左下方的「阅读更多」和「观看更多」通往对应列表。[F1 官网新闻](https://www.formula1.com/en/latest) · [F1赛事资讯](https://space.bilibili.com/65125803)
 - **积分榜**以原生 WinUI 表格显示名次、车手、国籍、车队及积分。车手肖像和圆形队徽取自 F1 官网。将鼠标悬停在车队积分榜的队徽上可查看 2026 赛季领队资料。[车手积分榜](https://www.formula1.com/en/results/2026/drivers) · [2026 车队领队](https://www.formula1.com/en/latest/article/who-are-the-2026-team-principals.2Jrw5LEJbEoX2gM5OtFL8K)
-- **赛果和赛历**直接显示本赛季分站正赛冠军、车队、圈数、完赛时间，以及各站比赛周末的日期。赛果中的分站打开七列原生完赛明细表，赛历中的分站打开官方详情。[官方赛果](https://www.formula1.com/en/results/2026/races) · [官方赛历](https://www.formula1.com/en/racing/2026)
+- **赛果和赛历**直接显示本赛季分站正赛冠军、车队、圈数、完赛时间，以及各站比赛周末的日期。赛果中的分站打开七列原生完赛明细表，赛历中的分站用原生表格显示各比赛环节的 Windows 本地时间。[官方赛果](https://www.formula1.com/en/results/2026/races) · [官方赛历](https://www.formula1.com/en/racing/2026)
 - **观赛**提供央视赛车专区、体育节目单、CCTV-5 和 CCTV-5+ 官方直播页及央视中国大奖赛转播专题。央视转播场次以节目单和赛事预告为准。[央视赛车专区](https://sports.cctv.com/racing/) · [体育节目单](https://sports.cctv.com/epg/?channel=cctv5+)
 - **创作者**可直达两个 UP 主的空间和马莎拉车的数据直播间。[F1赛事资讯](https://space.bilibili.com/65125803) · [马莎拉车](https://space.bilibili.com/1313650809) · [数据直播间](https://live.bilibili.com/23954427)
 
