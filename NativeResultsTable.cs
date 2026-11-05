@@ -41,7 +41,6 @@ public sealed class NativeResultsTable : UserControl
     private readonly ScrollViewer _scroller;
     private readonly SolidColorBrush _text = new();
     private readonly SolidColorBrush _heading = new();
-    private readonly SolidColorBrush _headerRule = new();
     private readonly SolidColorBrush _rowRule = new();
     private double _minimumTableWidth;
 
@@ -160,13 +159,19 @@ public sealed class NativeResultsTable : UserControl
             grid.Children.Add(content);
         }
 
-        return new Border
+        var row = new Border
         {
             Child = grid,
-            Height = isHeader ? 50 : 56.667,
-            BorderBrush = isHeader ? _headerRule : _rowRule,
-            BorderThickness = new Thickness(0, 0, 0, ruled ? (isHeader ? 2 : 1) : 0)
+            Height = isHeader ? 50 : 56.667
         };
+        if (isHeader)
+            row.Style = (Style)Application.Current.Resources["SectionDividerStyle"];
+        else if (ruled)
+        {
+            row.BorderBrush = _rowRule;
+            row.BorderThickness = new Thickness(0, 0, 0, 1);
+        }
+        return row;
     }
 
     private static Grid CreateBadge(TableBadge badge, double inset, bool isDriverPortrait)
@@ -250,7 +255,6 @@ public sealed class NativeResultsTable : UserControl
         var dark = ActualTheme == ElementTheme.Dark;
         _text.Color = dark ? Colors.White : Colors.Black;
         _heading.Color = dark ? Color.FromArgb(255, 205, 205, 205) : Color.FromArgb(255, 96, 96, 102);
-        _headerRule.Color = dark ? Color.FromArgb(112, 255, 255, 255) : Color.FromArgb(85, 0, 0, 0);
         _rowRule.Color = dark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(34, 0, 0, 0);
     }
 }

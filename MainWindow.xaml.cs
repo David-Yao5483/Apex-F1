@@ -28,10 +28,12 @@ public sealed partial class MainWindow : Window
     private SourceLink? _readerLink;
     private Control? _readerOrigin;
     private CancellationTokenSource? _onlineRequest;
+    private readonly CancellationTokenSource _prefetchLifetime = new();
+    private readonly HashSet<string> _prefetching = [];
     private IReadOnlyList<SourceLink> _news = [];
     private IReadOnlyList<SourceLink> _videos = [];
     private IReadOnlyList<SourceLink> _raceOverview = [];
-    private IReadOnlyList<SourceLink> _calendarOverview = [];
+    private RaceCalendar? _calendarOverview;
     private SourceLink? _raceDetail;
     private string _searchQuery = "";
     private bool _changingLanguage;
@@ -58,6 +60,8 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _onlineRequest?.Cancel();
+            _prefetchLifetime.Cancel();
+            _prefetchLifetime.Dispose();
             ReleaseWebView();
         };
     }
@@ -288,7 +292,7 @@ public sealed partial class MainWindow : Window
                 break;
             case "results":
                 ShowHub("赛果", "查看本赛季各站的正赛冠军、车队、圈数和完赛时间。", [new("官方赛果", [Catalog.Results])]);
-                RaceRows.ItemsSource = _raceOverview;
+                ShowRaceResults(_raceOverview);
                 RaceRows.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
@@ -300,7 +304,7 @@ public sealed partial class MainWindow : Window
                 break;
             case "calendar":
                 ShowHub("赛历", "查看各站大奖赛、赛道和分节时间。", [new("官方赛历", [Catalog.Calendar])]);
-                RaceRows.ItemsSource = _calendarOverview;
+                ShowRaceCalendar(_calendarOverview);
                 RaceRows.Visibility = Visibility.Visible;
                 OnlineControls.Visibility = Visibility.Visible;
                 break;
@@ -324,6 +328,8 @@ public sealed partial class MainWindow : Window
         StandingsTabs.Visibility = Visibility.Collapsed;
         RaceRows.Visibility = Visibility.Collapsed;
         RaceRows.ItemsSource = null;
+        FeaturedRacePanel.Visibility = Visibility.Collapsed;
+        FeaturedRaceRow.ItemsSource = null;
         if (!_changingLanguage)
             CloseReader();
         PageTitle.Text = UiLanguage.Translate(title);
@@ -363,6 +369,26 @@ public sealed partial class MainWindow : Window
             ResultsTable.ShowTeams(rows);
     }
 
+    private void ShowRaceCalendar(RaceCalendar? calendar)
+    {
+        _calendarOverview = calendar;
+        ShowRaceOverview(calendar?.Races, calendar?.Next, UiLanguage.Choose("下一站", "Next race"));
+    }
+
+    private void ShowRaceResults(IReadOnlyList<SourceLink> races)
+    {
+        _raceOverview = races;
+        ShowRaceOverview(races, races.LastOrDefault(), UiLanguage.Choose("上一站", "Previous race"));
+    }
+
+    private void ShowRaceOverview(IReadOnlyList<SourceLink>? races, SourceLink? featured, string heading)
+    {
+        RaceRows.ItemsSource = races;
+        FeaturedRaceHeading.Text = heading;
+        FeaturedRaceRow.ItemsSource = featured is null ? null : new[] { featured };
+        FeaturedRacePanel.Visibility = featured is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private async Task RefreshOnlineAsync()
     {
         _onlineRequest?.Cancel();
@@ -376,32 +402,39 @@ public sealed partial class MainWindow : Window
         {
             case "news":
                 await Task.WhenAll(
-                    UpdateFeedAsync(() => OnlineCatalog.GetNewsAsync(request.Token), links => NewsCards.ItemsSource = _news = links,
-                        F1FeedError, UiLanguage.Translate("F1 官网新闻"), request),
-                    UpdateFeedAsync(() => OnlineCatalog.GetVideosAsync(request.Token), links => VideoCards.ItemsSource = _videos = links,
+                    UpdateFeedAsync<IReadOnlyList<SourceLink>>(cached => OnlineCatalog.GetNewsAsync(request.Token, cached),
+                        links => NewsCards.ItemsSource = _news = links,
+                        F1FeedError, UiLanguage.Translate("F1 官网新闻"), request, links => PrefetchDetails("news", links)),
+                    UpdateFeedAsync<IReadOnlyList<SourceLink>>(cached => OnlineCatalog.GetVideosAsync(request.Token, cached),
+                        links => VideoCards.ItemsSource = _videos = links,
                         BiliFeedError, UiLanguage.Choose("B 站视频", "Bilibili videos"), request));
                 break;
             case "standings":
                 var source = SelectedStanding;
-                await UpdateFeedAsync(
-                    () => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token),
-                    ShowStandingTable, F1FeedError, source.DisplayTitle, request);
+                await UpdateFeedAsync<IReadOnlyList<StandingRow>>(
+                    cached => OnlineCatalog.GetStandingsAsync(source, source == Catalog.Standings, request.Token, cached),
+                    ShowStandingTable, F1FeedError, source.DisplayTitle, request,
+                    _ => PrefetchDetails("standings", [Catalog.Standings, Catalog.TeamStandings]));
                 break;
             case "results" when _raceDetail is { } race:
-                await UpdateFeedAsync(() => OnlineCatalog.GetRaceClassificationAsync(race, request.Token),
+                await UpdateFeedAsync<IReadOnlyList<RaceClassificationRow>>(
+                    cached => OnlineCatalog.GetRaceClassificationAsync(race, request.Token, cached),
                     ResultsTable.ShowRace, F1FeedError, race.DisplayTitle, request);
                 break;
             case "results":
-                await UpdateFeedAsync(() => OnlineCatalog.GetRaceResultsAsync(request.Token),
-                    rows => RaceRows.ItemsSource = _raceOverview = rows, F1FeedError, Catalog.Results.DisplayTitle, request);
+                await UpdateFeedAsync<IReadOnlyList<SourceLink>>(cached => OnlineCatalog.GetRaceResultsAsync(request.Token, cached),
+                    ShowRaceResults, F1FeedError, Catalog.Results.DisplayTitle, request,
+                    links => PrefetchDetails("results", links.Reverse().ToArray()));
                 break;
             case "calendar" when _raceDetail is { } schedule:
-                await UpdateFeedAsync(() => OnlineCatalog.GetRaceSessionsAsync(schedule, request.Token),
+                await UpdateFeedAsync<IReadOnlyList<RaceSession>>(
+                    cached => OnlineCatalog.GetRaceSessionsAsync(schedule, request.Token, cached),
                     ResultsTable.ShowSchedule, F1FeedError, schedule.DisplayTitle, request);
                 break;
             case "calendar":
-                await UpdateFeedAsync(() => OnlineCatalog.GetRaceCalendarAsync(request.Token),
-                    rows => RaceRows.ItemsSource = _calendarOverview = rows, F1FeedError, Catalog.Calendar.DisplayTitle, request);
+                await UpdateFeedAsync<RaceCalendar>(cached => OnlineCatalog.GetRaceCalendarAsync(request.Token, cached),
+                    ShowRaceCalendar, F1FeedError, Catalog.Calendar.DisplayTitle, request,
+                    calendar => PrefetchDetails("calendar", calendar.Races));
                 break;
         }
 
@@ -412,26 +445,58 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task UpdateFeedAsync<T>(Func<Task<T>> load, Action<T> show, InfoBar error, string label,
-        CancellationTokenSource request)
+    private async Task UpdateFeedAsync<T>(Func<Action<T>, Task<T>> load, Action<T> show, InfoBar error, string label,
+        CancellationTokenSource request, Action<T>? onUpdated = null)
     {
+        var showedCache = false;
         try
         {
-            var result = await load();
+            var result = await load(cached =>
+            {
+                if (_onlineRequest != request)
+                    return;
+
+                show(cached);
+                showedCache = true;
+            });
             if (_onlineRequest != request)
                 return;
 
             show(result);
+            onUpdated?.Invoke(result);
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or FormatException or
-            System.Text.Json.JsonException or System.Text.RegularExpressions.RegexMatchTimeoutException or OperationCanceledException)
+        catch (Exception ex) when (OnlineCatalog.IsFeedFailure(ex))
         {
             if (_onlineRequest != request || request.IsCancellationRequested)
                 return;
 
-            error.Title = UiLanguage.Choose($"{label}暂时无法更新", $"Could not refresh {label}");
-            error.Message = UiLanguage.Choose("可以重试刷新，或打开下方的来源页面。", "Try again or open the source page below.");
+            error.Severity = showedCache ? InfoBarSeverity.Informational : InfoBarSeverity.Warning;
+            error.Title = showedCache
+                ? UiLanguage.Choose($"正在显示{label}的缓存", $"Showing cached {label}")
+                : UiLanguage.Choose($"{label}暂时无法更新", $"Could not refresh {label}");
+            error.Message = showedCache
+                ? UiLanguage.Choose("恢复联网后可刷新以获取最新内容。", "Refresh when connected to get the latest content.")
+                : UiLanguage.Choose("可以重试刷新，或打开下方的来源页面。", "Try again or open the source page below.");
             error.IsOpen = true;
+        }
+    }
+
+    private async void PrefetchDetails(string section, IReadOnlyList<SourceLink> links)
+    {
+        if (!_prefetching.Add(section))
+            return;
+
+        var token = _prefetchLifetime.Token;
+        try
+        {
+            await OnlineCatalog.PrefetchDetailsAsync(section, links, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _prefetching.Remove(section);
         }
     }
 
@@ -511,16 +576,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task OpenSourceAsync(SourceLink link)
+    private async Task OpenSourceAsync(SourceLink link, Uri? target = null)
     {
         if (_readerLink is null)
             _readerOrigin = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
         ReleaseWebView();
         _readerLink = link;
+        _readerTarget = target ?? link.Uri;
+        _readerUsesPageCache = MainTabs.SelectedItem?.Tag is "news" or "standings" or "results" or "calendar";
         ReaderTitle.Text = link.DisplayTitle;
-        ReaderAddress.Text = link.Uri.Host;
+        ReaderAddress.Text = _readerTarget.Host;
         ReaderError.IsOpen = false;
         ReaderProgress.Visibility = Visibility.Visible;
+        CachedReader.Visibility = Visibility.Collapsed;
+        WebHost.Visibility = Visibility.Visible;
         Hub.Visibility = Visibility.Collapsed;
         Reader.Visibility = Visibility.Visible;
         UpdateRefreshButton();
@@ -561,6 +630,7 @@ public sealed partial class MainWindow : Window
                     DispatcherQueue.TryEnqueue(() => { if (_webView == view) view.Source = uri; });
             };
             ulong navigationId = 0;
+            Uri? requestedAddress = null;
             view.NavigationStarting += (_, args) =>
             {
                 if (GetWebUri(args.Uri) is not Uri uri)
@@ -569,30 +639,49 @@ public sealed partial class MainWindow : Window
                     return;
                 }
 
+                if (navigationId != args.NavigationId)
+                    requestedAddress = uri;
                 navigationId = args.NavigationId;
+                _readerTarget = uri;
                 ReaderAddress.Text = uri.Host;
                 ReaderError.IsOpen = false;
                 ReaderProgress.Visibility = Visibility.Visible;
+                CachedReader.Visibility = Visibility.Collapsed;
+                WebHost.Visibility = Visibility.Visible;
             };
-            view.NavigationCompleted += (_, args) =>
+            view.NavigationCompleted += async (_, args) =>
             {
                 if (_webView != view || args.NavigationId != navigationId)
                     return;
 
                 ReaderProgress.Visibility = Visibility.Collapsed;
                 UpdateBackNavigation();
-                if (!args.IsSuccess && args.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
+                if (args.IsSuccess && view.Source is { } address)
+                {
+                    if (!string.IsNullOrWhiteSpace(core.DocumentTitle))
+                        ReaderTitle.Text = core.DocumentTitle;
+                    await CacheReaderPageAsync(view, address, requestedAddress);
+                }
+                else if (args.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
+                {
+                    bool IsCurrent() => _webView == view && args.NavigationId == navigationId;
+                    if (await TryShowCachedReaderAsync(_readerTarget ?? link.Uri, IsCurrent) || !IsCurrent())
+                        return;
+
                     ShowReaderError(UiLanguage.Choose("无法加载网页", "Could not load the page"),
                         UiLanguage.Choose("请检查网络后刷新，或在浏览器打开。", "Check your connection, then reload or open in your browser."));
+                }
             };
-            view.Source = link.Uri;
+            view.Source = _readerTarget;
         }
         catch (Exception)
         {
-            if (_webView == view)
-                ShowReaderError(UiLanguage.Choose("无法启动内置网页", "Could not open the in-app browser"),
-                    UiLanguage.Choose("可在浏览器打开，或安装 Microsoft Edge WebView2 Runtime 后刷新。",
-                        "Open in your browser, or install the Microsoft Edge WebView2 Runtime and reload."));
+            if (_webView != view || await TryShowCachedReaderAsync(_readerTarget ?? link.Uri, () => _webView == view) || _webView != view)
+                return;
+
+            ShowReaderError(UiLanguage.Choose("无法启动内置网页", "Could not open the in-app browser"),
+                UiLanguage.Choose("可在浏览器打开，或安装 Microsoft Edge WebView2 Runtime 后刷新。",
+                    "Open in your browser, or install the Microsoft Edge WebView2 Runtime and reload."));
         }
     }
 
@@ -675,7 +764,7 @@ public sealed partial class MainWindow : Window
         if (_webView?.CoreWebView2 is { } core && !ReaderError.IsOpen)
             core.Reload();
         else if (_readerLink is { } link)
-            await OpenSourceAsync(link);
+            await OpenSourceAsync(link, _readerTarget);
         else if (OnlineControls.Visibility == Visibility.Visible)
             await RefreshOnlineAsync();
     }
@@ -686,7 +775,8 @@ public sealed partial class MainWindow : Window
     private async void OpenExternal_Click(object sender, RoutedEventArgs e)
     {
         var currentLink = _readerLink;
-        var uri = _webView?.Source is { } source ? GetWebUri(source.AbsoluteUri) : null;
+        var uri = CachedReader.Visibility == Visibility.Visible ? _readerTarget
+            : _webView?.Source is { } source ? GetWebUri(source.AbsoluteUri) : null;
         uri ??= currentLink?.Uri;
         if (uri is null)
             return;
@@ -710,6 +800,11 @@ public sealed partial class MainWindow : Window
         ReleaseWebView();
         _readerLink = null;
         _readerOrigin = null;
+        _readerTarget = null;
+        _readerUsesPageCache = false;
+        CachedReader.Visibility = Visibility.Collapsed;
+        CachedReaderLinks.ItemsSource = null;
+        CachedReaderText.Text = "";
         Reader.Visibility = Visibility.Collapsed;
         Hub.Visibility = Visibility.Visible;
         UpdateRefreshButton();

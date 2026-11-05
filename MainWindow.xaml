@@ -190,8 +190,8 @@
                      AutomationProperties.Name="主导航" SelectionChanged="MainTabs_SelectionChanged">
             <SelectorBarItem x:Name="NewsItem" Tag="news" Text="新闻" />
             <SelectorBarItem Tag="standings" Text="积分榜" />
-            <SelectorBarItem Tag="results" Text="赛果" />
             <SelectorBarItem Tag="calendar" Text="赛历" />
+            <SelectorBarItem Tag="results" Text="赛果" />
             <SelectorBarItem Tag="watch" Text="观赛" />
         </SelectorBar>
 
@@ -257,6 +257,12 @@
                                 </SelectorBar>
                                 <local:NativeResultsTable x:Name="ResultsTable" />
                             </StackPanel>
+                            <StackPanel x:Name="FeaturedRacePanel" Visibility="Collapsed" Spacing="8">
+                                <TextBlock x:Name="FeaturedRaceHeading" Style="{StaticResource SubtitleTextBlockStyle}"
+                                           AutomationProperties.HeadingLevel="Level2" />
+                                <ItemsRepeater x:Name="FeaturedRaceRow" ItemTemplate="{StaticResource RaceRowTemplate}" />
+                                <Border Style="{StaticResource SectionDividerStyle}" Margin="0,10,0,0" />
+                            </StackPanel>
                             <ItemsRepeater x:Name="RaceRows" Visibility="Collapsed" ItemTemplate="{StaticResource RaceRowTemplate}">
                                 <ItemsRepeater.Layout>
                                     <StackLayout Spacing="8" />
@@ -302,6 +308,22 @@
                                      Margin="8,4" />
                             <Border x:Name="WebHost" Grid.Row="1"
                                     Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                            <ScrollViewer x:Name="CachedReader" Grid.Row="1" Visibility="Collapsed"
+                                          HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel MaxWidth="900" Padding="24" Spacing="16">
+                                    <InfoBar x:Name="CachedReaderNotice" Severity="Informational" IsOpen="True" IsClosable="False" />
+                                    <TextBlock x:Name="CachedReaderText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                    <ItemsRepeater x:Name="CachedReaderLinks">
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate x:DataType="local:SourceLink">
+                                                <HyperlinkButton Click="CachedReaderLink_Click" Tag="{x:Bind}">
+                                                    <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" />
+                                                </HyperlinkButton>
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </StackPanel>
+                            </ScrollViewer>
                         </Grid>
                     </Grid>
                 </Grid>
